@@ -74,6 +74,21 @@ test('messageContentText handles text and tool_use', () => {
   assert.equal(messageContentText({}), '');
 });
 
+test('msgText handles nested message envelope and string content', () => {
+  // Nested envelope shape
+  assert.equal(
+    msgText({ message: { content: [{ type: 'text', text: 'nested hello' }] } }),
+    'nested hello'
+  );
+  // String content
+  assert.equal(msgText({ content: 'plain string' }), 'plain string');
+  // tool_result block
+  assert.equal(
+    msgText({ content: [{ type: 'tool_result', content: 'tool output' }] }),
+    'tool output'
+  );
+});
+
 test('msgText handles direct text and content-array shapes', () => {
   assert.equal(msgText({ text: 'hi' }), 'hi');
   assert.equal(msgText({ content: [{ type: 'text', text: 'a' }, { type: 'text', text: 'b' }] }), 'a\nb');

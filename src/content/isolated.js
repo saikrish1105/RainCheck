@@ -26,12 +26,31 @@
    * ================================================================== */
   function msgText(m) {
     if (!m || typeof m !== 'object') return '';
+    // Direct text field (observed shape).
     if (typeof m.text === 'string') return m.text;
+    // Nested message envelope: { message: { content: [...] } }.
+    if (m.message && typeof m.message === 'object') return msgText(m.message);
+    if (typeof m.content === 'string') return m.content;
     if (Array.isArray(m.content)) {
       return m.content
-        .filter((b) => b && typeof b.text === 'string')
-        .map((b) => b.text)
+        .map((b) => blockText(b))
+        .filter(Boolean)
         .join('\n');
+    }
+    return '';
+  }
+
+  // Extract text from a single content block (handles strings and objects).
+  function blockText(b) {
+    if (typeof b === 'string') return b;
+    if (!b || typeof b !== 'object') return '';
+    if (typeof b.text === 'string') return b.text;
+    if (b.type === 'tool_use' && b.input && typeof b.input.content === 'string') {
+      return b.input.content;
+    }
+    if (typeof b.content === 'string') return b.content;
+    if (Array.isArray(b.content)) {
+      return b.content.map(blockText).filter(Boolean).join('\n');
     }
     return '';
   }
@@ -55,26 +74,9 @@
     return parts.join('\n\n');
   }
 
-  // Readable text of a message, handling content arrays (text, tool_use, etc.).
+  // Readable text of a message (delegates to the robust msgText extractor).
   function messageContentText(m) {
-    if (!m || typeof m !== 'object') return '';
-    if (typeof m.text === 'string') return m.text;
-    if (Array.isArray(m.content)) {
-      const parts = [];
-      for (const b of m.content) {
-        if (!b || typeof b !== 'object') continue;
-        if (b.type === 'text' && typeof b.text === 'string') parts.push(b.text);
-        else if (b.type === 'tool_use' && b.input && typeof b.input.content === 'string') {
-          parts.push(b.input.content); // include generated artifact content
-        } else if (b.type === 'tool_result' && typeof b.content === 'string') {
-          parts.push(b.content);
-        } else if (typeof b.text === 'string') {
-          parts.push(b.text);
-        }
-      }
-      return parts.join('\n');
-    }
-    return '';
+    return msgText(m);
   }
 
   function roleLabel(m) {
@@ -663,7 +665,6 @@
           <div class="rc-actions">
             <button class="rc-btn primary rc-copy-all" disabled>Copy All</button>
             <button class="rc-btn rc-copy-md" disabled>Copy Markdown</button>
-            <button class="rc-btn rc-dl-md" disabled>Download .md</button>
             <button class="rc-btn rc-copy-summary" disabled>Copy Summary</button>
           </div>
           <div class="rc-status"></div>
@@ -684,7 +685,6 @@
     const outEl = wrap.querySelector('.rc-out');
     const copyAll = wrap.querySelector('.rc-copy-all');
     const copyMd = wrap.querySelector('.rc-copy-md');
-    const dlMd = wrap.querySelector('.rc-dl-md');
     const copySummary = wrap.querySelector('.rc-copy-summary');
     const closeBtn = wrap.querySelector('.rc-close');
 
@@ -767,7 +767,6 @@
       outEl.textContent = '';
       copyAll.disabled = true;
       copyMd.disabled = true;
-      dlMd.disabled = true;
       copySummary.disabled = true;
       setStatus('');
     }
@@ -803,12 +802,15 @@
           const chatMessages = (data && data.chat_messages) || [];
           const summary = (data && data.summary) || '';
           const markdown = buildTranscriptMarkdown(chatMessages);
+          if (chatMessages.length && !markdown) {
+            // Diagnostic: messages exist but no text was extracted — print the shape.
+            console.warn('[RainCheck] chat_messages present but text extraction empty. Sample:', JSON.stringify(chatMessages[0]).slice(0, 1000));
+          }
           last = { output, markdown, summary };
           outEl.textContent = output;
           outEl.classList.add('visible');
           copyAll.disabled = false;
           copyMd.disabled = false;
-          dlMd.disabled = false;
           copySummary.disabled = false;
           setStatus(
             '✓ Done. ' + chatMessages.length + ' message(s), ' +
@@ -828,34 +830,11 @@
     copyAll.addEventListener('click', () => copyText(last.output, () => flash(copyAll)));
     copyMd.addEventListener('click', () => copyText(last.markdown, () => flash(copyMd)));
     copySummary.addEventListener('click', () => copyText(last.summary, () => flash(copySummary)));
-    dlMd.addEventListener('click', () => downloadMd(last.markdown, mdFilename()));
 
     function flash(btn) {
       const old = btn.textContent;
       btn.textContent = 'Copied!';
       setTimeout(() => (btn.textContent = old), 1200);
-    }
-
-    function mdFilename() {
-      const slug = (document.title || 'conversation')
-        .replace(/[\\/:*?"<>|]/g, '_')
-        .trim()
-        .slice(0, 60) || 'conversation';
-      const stamp = new Date().toISOString().slice(0, 10);
-      return `RainCheck-${slug}-${stamp}.md`;
-    }
-
-    function downloadMd(text, filename) {
-      if (!text) return;
-      const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
-      const url = URL.createObjectURL(blob);
-      const a = document.createElement('a');
-      a.href = url;
-      a.download = filename;
-      document.body.appendChild(a);
-      a.click();
-      document.body.removeChild(a);
-      setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
     function handleUrlChange() {
