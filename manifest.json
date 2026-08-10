@@ -2,7 +2,7 @@
   "manifest_version": 3,
   "name": "RainCheck",
   "version": "0.2.0",
-  "description": "See your Claude.ai session and weekly usage, and generate a clean markdown handoff summary so you can continue your conversation anywhere.",
+  "description": "See your Claude.ai session and weekly usage and generate a clean markdown summary so you can continue your conversation anywhere.",
   "host_permissions": ["https://claude.ai/*"],
   "action": {
     "default_title": "RainCheck",
