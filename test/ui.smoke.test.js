@@ -69,6 +69,21 @@ test('clicking the cloud toggles the panel open', (t) => {
   assert.equal(panel.classList.contains('open'), true, 'opens on click');
 });
 
+test('panel anchors to the cloud position on open', (t) => {
+  const { window, dom } = load();
+  t.after(() => closeDom(dom));
+  const host = window.document.getElementById('__raincheck_summary_host__');
+  const shadow = host.shadowRoot;
+  const panel = shadow.querySelector('.rc-panel');
+  const cloud = shadow.querySelector('.rc-cloud');
+  cloud.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
+  // positionPanel() sets inline left/top (and clears right/bottom).
+  assert.ok(panel.style.left !== '', 'panel should get an inline left');
+  assert.ok(panel.style.top !== '', 'panel should get an inline top');
+  assert.equal(panel.style.right, 'auto', 'panel should clear the default right');
+  assert.equal(panel.style.bottom, 'auto', 'panel should clear the default bottom');
+});
+
 test('usage bar attaches after the model selector appears', (t) => {
   const { window, dom } = load();
   t.after(() => closeDom(dom));

@@ -579,22 +579,22 @@
     style.textContent = `
 :host{all:initial;}
 *{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
-.rc-cloud{position:fixed;right:16px;bottom:16px;width:64px;height:64px;z-index:2147483647;cursor:grab;user-select:none;filter:drop-shadow(0 4px 8px rgba(0,0,0,.25));}
-.rc-cloud img{width:100%;height:100%;pointer-events:none;}
-.rc-cloud.dragging{cursor:grabbing;opacity:.9;}
-.rc-panel{position:fixed;right:16px;bottom:92px;width:540px;max-width:calc(100vw - 32px);max-height:72vh;display:none;flex-direction:column;background:#1e1f24;border:1px solid #383a42;border-radius:14px;box-shadow:0 16px 44px rgba(0,0,0,.5);z-index:2147483646;overflow:hidden;color:#e7e7e7;font-size:13px;}
+.rc-cloud{position:fixed;right:16px;bottom:16px;width:72px;height:72px;z-index:2147483647;cursor:grab;user-select:none;filter:drop-shadow(0 5px 12px rgba(0,0,0,.35));-webkit-tap-highlight-color:transparent;}
+.rc-cloud img{width:100%;height:100%;pointer-events:none;display:block;}
+.rc-cloud.dragging{cursor:grabbing;opacity:.85;}
+.rc-panel{position:fixed;width:540px;max-width:calc(100vw - 32px);max-height:72vh;display:none;flex-direction:column;background:#1e1f24;border:1px solid #383a42;border-radius:14px;box-shadow:0 16px 44px rgba(0,0,0,.5);z-index:2147483646;overflow:hidden;color:#e7e7e7;font-size:13px;}
 .rc-panel.open{display:flex;}
 .rc-head{display:flex;align-items:center;gap:8px;padding:12px 14px;background:#26282e;border-bottom:1px solid #383a42;flex:0 0 auto;}
 .rc-head img{width:24px;height:24px;border-radius:6px;}
 .rc-title{font-weight:700;font-size:14px;flex:1;}
 .rc-close{background:none;border:none;color:#aaa;font-size:18px;cursor:pointer;line-height:1;padding:2px 6px;}
 .rc-body{padding:14px;overflow-y:auto;flex:1 1 auto;}
-.rc-generate{width:100%;background:linear-gradient(135deg,#2f6feb,#b146c2);color:#fff;border:none;border-radius:10px;padding:11px;font-size:14px;font-weight:700;cursor:pointer;}
+.rc-generate{width:100%;background:linear-gradient(135deg,#ff9a3c,#ff6b2c);color:#fff;border:none;border-radius:10px;padding:11px;font-size:14px;font-weight:700;cursor:pointer;box-shadow:0 4px 12px rgba(255,107,44,.35);}
 .rc-generate:disabled{opacity:.6;cursor:not-allowed;}
 .rc-actions{display:flex;gap:8px;margin-top:10px;flex-wrap:wrap;}
 .rc-btn{background:#3a3d46;color:#e7e7e7;border:none;border-radius:8px;padding:6px 11px;font-size:12px;font-weight:600;cursor:pointer;}
 .rc-btn:disabled{opacity:.5;cursor:not-allowed;}
-.rc-btn.primary{background:#2f6feb;color:#fff;}
+.rc-btn.primary{background:#ff7a2e;color:#fff;}
 .rc-status{margin-top:10px;font-size:12px;color:#9aa0ab;min-height:15px;}
 .rc-status.error{color:#ff8f8f;}
 .rc-status.ok{color:#5eead4;}
@@ -642,6 +642,35 @@
 
     let last = { output: '', json: '', summary: '' };
 
+    // Position the panel anchored to the cloud's current location.
+    function positionPanel() {
+      const cr = cloud.getBoundingClientRect();
+      const ph = panel.offsetHeight;
+      const pw = panel.offsetWidth;
+      const vw = window.innerWidth;
+      const vh = window.innerHeight;
+      const gap = 10;
+
+      // Vertical: prefer opening above if there's room, else below.
+      let top;
+      if (cr.top >= ph + gap) {
+        top = cr.top - ph - gap;
+      } else if (vh - cr.bottom >= ph + gap) {
+        top = cr.bottom + gap;
+      } else {
+        top = 8;
+      }
+
+      // Horizontal: center on the cloud, clamped to the viewport.
+      let left = cr.left + cr.width / 2 - pw / 2;
+      left = Math.max(8, Math.min(left, vw - pw - 8));
+
+      panel.style.left = left + 'px';
+      panel.style.top = top + 'px';
+      panel.style.right = 'auto';
+      panel.style.bottom = 'auto';
+    }
+
     // Draggable cloud
     let dragging = false;
     let moved = false;
@@ -669,10 +698,14 @@
       if (dragging) {
         dragging = false;
         cloud.classList.remove('dragging');
+        // Re-anchor an open panel to the cloud's new location.
+        if (panel.classList.contains('open')) positionPanel();
       }
     });
     cloud.addEventListener('click', () => {
-      if (!moved) panel.classList.toggle('open');
+      if (moved) return;
+      const open = panel.classList.toggle('open');
+      if (open) positionPanel();
     });
     closeBtn.addEventListener('click', () => panel.classList.remove('open'));
 

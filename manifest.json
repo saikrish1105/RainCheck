@@ -4,6 +4,20 @@
   "version": "0.2.0",
   "description": "Generate a rate-limit handoff summary + show Claude session/weekly usage bars for the current conversation.",
   "host_permissions": ["https://claude.ai/*"],
+  "action": {
+    "default_title": "RainCheck Summary",
+    "default_popup": "src/options/popup.html",
+    "default_icon": {
+      "16": "src/assets/cloud.png",
+      "48": "src/assets/cloud.png",
+      "128": "src/assets/cloud.png"
+    }
+  },
+  "icons": {
+    "16": "src/assets/cloud.png",
+    "48": "src/assets/cloud.png",
+    "128": "src/assets/cloud.png"
+  },
   "content_scripts": [
     {
       "matches": ["https://claude.ai/*", "https://*.claude.ai/*"],
@@ -17,10 +31,5 @@
       "resources": ["src/assets/cloud.png", "src/injected/bridge.js"],
       "matches": ["https://claude.ai/*"]
     }
-  ],
-  "icons": {
-    "16": "src/assets/cloud.png",
-    "48": "src/assets/cloud.png",
-    "128": "src/assets/cloud.png"
-  }
+  ]
 }

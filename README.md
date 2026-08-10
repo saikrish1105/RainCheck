@@ -10,6 +10,15 @@ A **minimalistic** Chrome extension for claude.ai with two features:
 Nothing runs automatically except the usage bars (which mirror claude-counter's
 behavior). The summary is generated only when you press **Generate Summary**.
 
+The brand mark is a **cute orange smiling cloud**:
+- It's the extension icon and the draggable in-page button (a transparent,
+  genuinely cloud-shaped button — no rectangular box).
+- Clicking the extension icon in the toolbar opens a popup with a short project
+  description and the smiling cloud bouncing around in the background.
+- The summary panel **anchors to the cloud**: wherever you drag the cloud, the
+  panel opens right next to it (above if there's room, otherwise below), instead
+  of always snapping to the bottom-right.
+
 ---
 
 ## Feature 1 — Generate Summary
@@ -61,7 +70,8 @@ RainCheck/
 ├── src/
 │   ├── content/isolated.js        ★ ISOLATED world: summary panel + usage bars
 │   ├── injected/bridge.js         MAIN world: intercepts SSE + answers /usage
-│   └── assets/cloud.png           the cute cloud icon
+│   ├── options/popup.html         toolbar popup (description + bouncing cloud)
+│   └── assets/cloud.png           the orange smiling cloud (draggable button / logo)
 ├── test/                          unit + jsdom UI smoke tests
 └── package.json                   npm test
 ```

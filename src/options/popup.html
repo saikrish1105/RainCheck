@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <style>
+      * { box-sizing: border-box; }
+      body {
+        width: 320px;
+        margin: 0;
+        font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif;
+        background: linear-gradient(160deg, #2b2d33 0%, #1e1f24 100%);
+        color: #f3f3f5;
+        overflow: hidden;
+        position: relative;
+      }
+      /* Animated bouncing cloud background */
+      .bg {
+        position: absolute;
+        inset: 0;
+        overflow: hidden;
+        pointer-events: none;
+        z-index: 0;
+      }
+      .cloud {
+        position: absolute;
+        width: 64px;
+        height: 64px;
+        opacity: 0.14;
+        animation: floaty 6s ease-in-out infinite;
+      }
+      .cloud.c1 { left: 8%;  top: 60%; animation-delay: 0s; }
+      .cloud.c2 { left: 62%; top: 70%; width: 48px; height: 48px; animation-delay: 1.2s; }
+      .cloud.c3 { left: 30%; top: 78%; width: 40px; height: 40px; animation-delay: 2.4s; }
+      .cloud.c4 { right: 6%; top: 55%; width: 56px; height: 56px; animation-delay: 0.6s; }
+      .cloud.c5 { left: 55%; top: 40%; width: 34px; height: 34px; animation-delay: 3s; }
+
+      @keyframes floaty {
+        0%, 100% { transform: translateY(0) scale(1); }
+        25%      { transform: translateY(-18px) scale(1.06); }
+        50%      { transform: translateY(0) scale(0.98); }
+        75%      { transform: translateY(14px) scale(1.03); }
+      }
+
+      .content {
+        position: relative;
+        z-index: 1;
+        padding: 18px 16px;
+      }
+      .head {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        margin-bottom: 12px;
+      }
+      .logo {
+        width: 56px;
+        height: 56px;
+        flex: 0 0 auto;
+        filter: drop-shadow(0 4px 8px rgba(0,0,0,.4));
+      }
+      h1 { font-size: 20px; margin: 0; color: #ffc98a; }
+      .tag { font-size: 12px; color: #b9bec9; margin: 2px 0 0; }
+      p.desc { font-size: 13px; line-height: 1.55; color: #e7e9ef; margin: 6px 0 12px; }
+      ul { margin: 0 0 14px; padding-left: 18px; color: #cfd3dc; font-size: 12.5px; line-height: 1.6; }
+      .foot { font-size: 11px; color: #8d92a0; border-top: 1px solid #383a42; padding-top: 10px; }
+    </style>
+  </head>
+  <body>
+    <div class="bg">
+      <img class="cloud c1" src="../assets/cloud.png" alt="" />
+      <img class="cloud c2" src="../assets/cloud.png" alt="" />
+      <img class="cloud c3" src="../assets/cloud.png" alt="" />
+      <img class="cloud c4" src="../assets/cloud.png" alt="" />
+      <img class="cloud c5" src="../assets/cloud.png" alt="" />
+    </div>
+    <div class="content">
+      <div class="head">
+        <img class="logo" src="../assets/cloud.png" alt="RainCheck cloud" />
+        <div>
+          <h1>RainCheck</h1>
+          <div class="tag">Session saver for Claude.ai</div>
+        </div>
+      </div>
+      <p class="desc">
+        Recover your work when a Claude session hits a rate limit. One click generates a
+        ready-to-paste handoff summary, and live usage bars track your 5-hour and weekly limits.
+      </p>
+      <ul>
+        <li>☁ Generate a rate-limit handoff summary</li>
+        <li>📊 Session &amp; weekly usage bars with reset timers</li>
+        <li>🔒 Everything stays on your device</li>
+      </ul>
+      <div class="foot">Open a conversation on claude.ai and click the ☁ button.</div>
+    </div>
+  </body>
+</html>
