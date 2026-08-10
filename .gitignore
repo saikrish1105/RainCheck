@@ -1,0 +1,6 @@
+# Demo output
+demo/output/
+
+# Editor / OS
+.DS_Store
+*.swp

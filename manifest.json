@@ -1,0 +1,50 @@
+{
+  "manifest_version": 3,
+  "name": "RainCheck — Claude Session Saver",
+  "version": "0.1.0",
+  "description": "Recover your work when a Claude.ai session is interrupted by a rate limit: download hidden/partial artifacts, get a structured handoff summary, and resume on a fresh session.",
+  "permissions": ["storage", "downloads", "tabs"],
+  "host_permissions": [
+    "https://claude.ai/*",
+    "https://api.anthropic.com/*",
+    "https://api.openai.com/*",
+    "https://generativelanguage.googleapis.com/*"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js"
+  },
+  "options_ui": {
+    "page": "options/options.html",
+    "open_in_tab": true
+  },
+  "action": {
+    "default_title": "RainCheck",
+    "default_popup": "options/popup.html",
+    "default_icon": {
+      "16": "assets/icon128.png",
+      "48": "assets/icon128.png",
+      "128": "assets/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "assets/icon128.png",
+    "48": "assets/icon128.png",
+    "128": "assets/icon128.png"
+  },
+  "content_scripts": [
+    {
+      "matches": ["https://claude.ai/*", "https://*.claude.ai/*"],
+      "js": ["shared/parser-core.js", "content/network-hook.js"],
+      "run_at": "document_start",
+      "world": "MAIN",
+      "all_frames": false
+    },
+    {
+      "matches": ["https://claude.ai/*", "https://*.claude.ai/*"],
+      "js": ["shared/parser-core.js", "content/panel.js", "content/bridge.js"],
+      "run_at": "document_start",
+      "world": "ISOLATED",
+      "all_frames": false
+    }
+  ]
+}
