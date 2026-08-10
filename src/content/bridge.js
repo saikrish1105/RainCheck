@@ -340,7 +340,7 @@
         const n = RC.ApiLoader.normalize(data || {});
         if (!n.userMessages.length && !n.assistantMessages.length && !n.artifacts.length) {
           setStatus('⚠ The API returned no recoverable content for this conversation.');
-          console.log('[RainCheck] API response had no content. top-level keys:', n.rawKeys, 'sample:', String(JSON.stringify(data)).slice(0, 800));
+          console.log('[RainCheck] API response had no content. top-level keys:', JSON.stringify(n.rawKeys), 'sample:', String(JSON.stringify(data)).slice(0, 2000));
           return;
         }
         const s = getSession(convId);
