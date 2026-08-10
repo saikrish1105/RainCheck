@@ -1,23 +1,22 @@
-# 🌧 RainCheck Summary + Usage Counter
+# 🌧 RainCheck — Claude.ai Session Saver
 
-A **minimalistic** Chrome extension for claude.ai with two features:
+A Chrome extension for claude.ai with two features:
 
-1. **Generate Summary** — a one-button rate-limit handoff summary.
-2. **Usage bars** (claude-counter style) — live session (5h) and weekly (7d)
+1. **Usage bars** (claude-counter style) — live session (5h) and weekly (7d)
    utilization percentages with progress bars and reset countdowns, injected
    into the chat input area.
+2. **Generate Summary** — a one-button handoff: turns your conversation into a
+   clean, LLM-ready markdown transcript you can paste into another AI or session
+   to continue where you left off.
 
-Nothing runs automatically except the usage bars (which mirror claude-counter's
-behavior). The summary is generated only when you press **Generate Summary**.
+Nothing runs automatically except the usage bars. The summary is generated only
+when you press **Generate Summary**.
 
 The brand mark is a **cute orange smiling cloud**:
 - It's the extension icon and the draggable in-page button (a transparent,
   genuinely cloud-shaped button — no rectangular box).
-- Clicking the extension icon in the toolbar opens a popup with a short project
-  description and the smiling cloud bouncing around in the background.
 - The summary panel **anchors to the cloud**: wherever you drag the cloud, the
-  panel opens right next to it (above if there's room, otherwise below), instead
-  of always snapping to the bottom-right.
+  panel opens right next to it (above if there's room, otherwise below).
 
 ---
 
@@ -27,16 +26,9 @@ Open a conversation, click the cloud button, press **Generate Summary**. It
 fetches the conversation from Claude's own API (using your login) and produces a
 handoff text with:
 
-- the continuation header — *"You are continuing a session that was interrupted
-  by a rate limit. Do NOT restart from scratch — continue exactly where it
-  stopped."*
 - **the summary of the text so far** (Claude's saved summary)
-- **the entire text interaction** (all user + assistant messages)
-- **the last text before the rate limit was hit**
 - **a clean Markdown transcript** of the whole conversation — view / **Copy Markdown**
 - Claude's saved summary again
-
-Per-tab: empty on a new page; navigating to another conversation resets it.
 
 The conversation is converted from Claude's raw JSON into a **clean, LLM-ready
 Markdown transcript** (title, saved summary, and `### User N` / `### Assistant N`
@@ -78,8 +70,27 @@ RainCheck/
 │   ├── injected/bridge.js         MAIN world: intercepts SSE + answers /usage
 │   ├── options/popup.html         toolbar popup (description + bouncing cloud)
 │   └── assets/cloud.png           the orange smiling cloud (draggable button / logo)
+├── website/                       dark-orange landing site (index, FAQ, Terms, Privacy)
+├── docs/                          privacy policy + Chrome Web Store listing text
+├── scripts/                       build + store-asset generation
 ├── test/                          unit + jsdom UI smoke tests
-└── package.json                   npm test
+└── package.json                   npm test / npm run build
+```
+
+## Website
+
+A dark, orange-themed static site lives in `website/` (no build step — plain
+HTML/CSS). Pages:
+- `index.html` — landing page (hero, features, how-it-works)
+- `faq.html` — FAQ (accordion)
+- `terms.html` — Terms of Service
+- `privacy.html` — Privacy Policy
+
+The "Install extension" buttons are placeholders — fill them in once the
+extension is published to the Chrome Web Store. Preview locally with:
+
+```bash
+python3 -m http.server 8080 --directory website
 ```
 
 ## Test
