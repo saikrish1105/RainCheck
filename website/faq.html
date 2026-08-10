@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>FAQ — RainCheck</title>
+  <link rel="icon" type="image/png" href="assets/cloud.png" />
+  <link rel="stylesheet" href="assets/style.css" />
+</head>
+<body>
+
+  <nav>
+    <div class="nav-inner">
+      <a class="brand" href="index.html">
+        <img src="assets/cloud.png" alt="RainCheck cloud" />
+        <span>RainCheck</span>
+      </a>
+      <div class="nav-links">
+        <a href="index.html#features">Features</a>
+        <a href="index.html#how">How it works</a>
+        <a href="faq.html">FAQ</a>
+        <a class="nav-cta" href="#">Install extension</a>
+      </div>
+    </div>
+  </nav>
+
+  <section>
+    <div class="wrap">
+      <div class="section-label">Help</div>
+      <h1>Frequently Asked Questions</h1>
+      <p class="lead">Still not sure? <a href="mailto:krishsaivishal@gmail.com">Email us</a> or reach out on <a href="https://www.linkedin.com/in/sai-krish-naidu-54550521a/">LinkedIn</a>.</p>
+
+      <div class="faq">
+        <div class="faq-item">
+          <button class="faq-q">What exactly does RainCheck do?<span class="chev">▾</span></button>
+          <div class="faq-a">RainCheck is a Chrome extension for Claude.ai with two features: it shows your session (5-hour) and weekly usage as progress bars with reset countdowns, and it lets you generate a clean markdown summary of your conversation so you can continue it elsewhere.</div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q">Is RainCheck free?<span class="chev">▾</span></button>
+          <div class="faq-a">Yes, RainCheck is completely free. No subscription, no paid tiers.</div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q">Do I need an account?<span class="chev">▾</span></button>
+          <div class="faq-a">No. RainCheck has no sign-in or account of its own. It uses the Claude.ai account you're already logged into, directly in your browser.</div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q">Does RainCheck collect or send my data anywhere?<span class="chev">▾</span></button>
+          <div class="faq-a">No. Everything runs locally in your browser. RainCheck only talks to Claude.ai using your existing login — the same API calls the Claude.ai page itself makes — and sends nothing to any third party. There's no server, no tracking, no analytics.</div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q">Does RainCheck work on other AI websites like ChatGPT or Gemini?<span class="chev">▾</span></button>
+          <div class="faq-a">No. RainCheck is built specifically for Claude.ai and only runs on claude.ai.</div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q">What do the usage bars mean?<span class="chev">▾</span></button>
+          <div class="faq-a">The session bar shows how much of your 5-hour rolling window you've used, and the weekly bar shows your 7-day usage. Each shows a percentage and a countdown to when it resets, so you always know how much room you have left.</div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q">Why don't you show the exact number of tokens used?<span class="chev">▾</span></button>
+          <div class="faq-a">Claude.ai's usage API only exposes utilization percentages, not exact token counts. RainCheck shows the exact percentages the API provides, which is the same data Claude.ai uses for its own usage display.</div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q">What is the "handoff summary" for?<span class="chev">▾</span></button>
+          <div class="faq-a">If a session is interrupted by a rate limit, or you just want to switch devices, the handoff summary turns your conversation into a clean markdown transcript (title, Claude's saved summary, and your messages in order, with generated files included). You can paste it into another AI or a new session to continue exactly where you left off.</div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q">The install link isn't working / the extension isn't published yet.<span class="chev">▾</span></button>
+          <div class="faq-a">RainCheck is in the final stages of the Chrome Web Store review process. The install link will be active here the moment it's published.</div>
+        </div>
+
+        <div class="faq-item">
+          <button class="faq-q">How do I contact you?<span class="chev">▾</span></button>
+          <div class="faq-a">You can email <a href="mailto:krishsaivishal@gmail.com">krishsaivishal@gmail.com</a> or message me on <a href="https://www.linkedin.com/in/sai-krish-naidu-54550521a/">LinkedIn</a>.</div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer>
+    <div class="footer-inner">
+      <div class="footer-brand">
+        <img src="assets/cloud.png" alt="RainCheck" />
+        <span>RainCheck</span>
+      </div>
+      <div class="footer-links">
+        <a href="index.html">Home</a>
+        <a href="faq.html">FAQ</a>
+        <a href="terms.html">Terms</a>
+        <a href="privacy.html">Privacy</a>
+      </div>
+      <div class="copy">© 2026 RainCheck · Built with ☕ and an orange cloud</div>
+    </div>
+  </footer>
+
+  <script>
+    document.querySelectorAll('.faq-q').forEach(function (btn) {
+      btn.addEventListener('click', function () {
+        btn.parentElement.classList.toggle('open');
+      });
+    });
+  </script>
+
+</body>
+</html>

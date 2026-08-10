@@ -1,0 +1,16 @@
+{
+  "name": "raincheck-summary",
+  "version": "0.2.0",
+  "description": "RainCheck — Chrome extension: see your Claude.ai session/weekly usage and generate a clean markdown handoff summary.",
+  "private": true,
+  "scripts": {
+    "test": "node --test --test-force-exit \"test/**/*.test.js\"",
+    "build": "node scripts/build.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.1"
+  }
+}

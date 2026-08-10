@@ -1,0 +1,5 @@
+# Ignore version control and editor cruft from the build context
+.git
+.gitignore
+.DS_Store
+*.swp

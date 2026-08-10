@@ -1,0 +1,11 @@
+# Dependencies (if any are added for dev/test)
+node_modules/
+
+# Build output (publishable package)
+dist/
+build/
+raincheck-*.zip
+
+# Editor / OS
+.DS_Store
+*.swp
