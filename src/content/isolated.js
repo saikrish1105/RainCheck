@@ -148,6 +148,7 @@
    * Shared helpers
    * ================================================================== */
   const API_ROOT = 'https://claude.ai/api';
+  let currentOrgId = null;
 
   function getOrgIdFromCookie() {
     try {
@@ -307,7 +308,6 @@
     let lastUsageSseMs = 0;
     let lastUsageUpdateMs = 0;
     const rolloverHandledForResetMs = { five_hour: null, seven_day: null };
-    let currentOrgId = null;
 
     function applyUsageUpdate(normalized, source) {
       if (!normalized) return;
