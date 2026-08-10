@@ -1,10 +1,11 @@
 {
   "name": "raincheck-summary",
-  "version": "0.1.0",
-  "description": "RainCheck Summary — minimal Chrome extension that generates a rate-limit handoff summary for the current Claude.ai conversation.",
+  "version": "0.2.0",
+  "description": "RainCheck — Chrome extension: see your Claude.ai session/weekly usage and generate a clean markdown handoff summary.",
   "private": true,
   "scripts": {
-    "test": "node --test --test-force-exit \"test/**/*.test.js\""
+    "test": "node --test --test-force-exit \"test/**/*.test.js\"",
+    "build": "node scripts/build.js"
   },
   "engines": {
     "node": ">=18"

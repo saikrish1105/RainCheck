@@ -53,16 +53,13 @@ test('buildOutput contains the continuation header', () => {
   assert.ok(out.includes('Do NOT restart from scratch'));
 });
 
-test('buildOutput contains Claude summary, entire interaction, last text, and transcript', () => {
+test('buildOutput contains Claude summary and markdown transcript', () => {
   const out = buildOutput(data);
   assert.ok(out.includes('The summary of the text so far:'));
   assert.ok(out.includes('User set up Nextcloud with Docker.'));
-  assert.ok(out.includes('The entire text interaction:'));
-  assert.ok(out.includes('Build a report'));
-  assert.ok(out.includes('The last text before rate limit was hit:'));
-  assert.ok(out.includes('Here is a partial document that got cut off'));
   assert.ok(out.includes('Full conversation transcript (markdown):'));
   assert.ok(out.includes('### User 1'));
+  assert.ok(out.includes('Build a report'));
 });
 
 test('msgText handles nested message envelope and string content', () => {
