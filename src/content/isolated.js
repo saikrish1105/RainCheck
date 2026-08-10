@@ -74,6 +74,85 @@
     return parts.join('\n\n');
   }
 
+  // Render a single message's meaningful content to markdown text.
+  // Drops index/uuid/timestamps/tool plumbing and keeps only what an LLM
+  // needs to continue: the actual human/assistant text, plus any generated
+  // files (create_file tool_use) since those are real outputs.
+  function messageMarkdown(m) {
+    if (!m || typeof m !== 'object') return '';
+    const blocks = Array.isArray(m.content) ? m.content : [];
+    // Older shape: message text lives directly on the top-level `text` field.
+    if (!blocks.length && typeof m.text === 'string' && m.text.trim()) {
+      return m.text.trim();
+    }
+    const parts = [];
+    for (const b of blocks) {
+      if (!b || typeof b !== 'object') continue;
+      if (b.type === 'text' && typeof b.text === 'string' && b.text.trim()) {
+        parts.push(b.text.trim());
+      } else if (b.type === 'tool_use') {
+        const input = b.input || {};
+        // Capture generated files (documents/code Claude produced).
+        if (
+          (b.name === 'create_file' || b.name === 'edit_file' || b.name === 'create_documents') &&
+          typeof input.file_text === 'string' && input.file_text.trim()
+        ) {
+          const label = input.path || input.title || 'generated-file';
+          parts.push(`\n📄 **Generated file: ${label}**\n\n\`\`\`\n${input.file_text.trim()}\n\`\`\`\n`);
+        }
+      }
+    }
+    return parts.join('\n\n').trim();
+  }
+
+  // Convert the full API response into a clean, LLM-ready markdown transcript.
+  // Only the conversation title, Claude's saved summary, and the human/assistant
+  // turns are kept — all uuid/index/timestamp/tool noise is dropped.
+  function buildTranscriptMarkdown(data) {
+    const chatMessages = (data && data.chat_messages) || [];
+    const name = (data && data.name) || '';
+    const summary = (data && typeof data.summary === 'string' ? data.summary : '').trim();
+    const lines = [];
+
+    if (name) {
+      lines.push(`# ${name}`);
+      lines.push('');
+    }
+    if (summary) {
+      lines.push('## Session summary');
+      lines.push('');
+      lines.push(summary);
+      lines.push('');
+    }
+    lines.push('## Conversation transcript');
+    lines.push('');
+
+    let userCount = 0;
+    let assistantCount = 0;
+    for (const m of chatMessages) {
+      const md = messageMarkdown(m);
+      if (!md) continue;
+      const sender = m.sender || m.role;
+      if (sender === 'human' || sender === 'user') {
+        userCount++;
+        lines.push(`### User ${userCount}`);
+        lines.push('');
+        lines.push(md);
+        lines.push('');
+      } else {
+        assistantCount++;
+        lines.push(`### Assistant ${assistantCount}`);
+        lines.push('');
+        lines.push(md);
+        lines.push('');
+      }
+    }
+
+    const out = lines.join('\n').trim();
+    if (!userCount && !assistantCount) return '(No messages)';
+    return out;
+  }
+
   function buildOutput(data) {
     const chatMessages =
       (data && (Array.isArray(data.chat_messages) ? data.chat_messages : [])) || [];
@@ -96,8 +175,8 @@
     lines.push('The last text before rate limit was hit:');
     lines.push(lastMessageText(chatMessages) || '(No messages)');
     lines.push('');
-    lines.push('Full chat JSON (all user + assistant messages):');
-    lines.push(JSON.stringify(chatMessages, null, 2));
+    lines.push('Full conversation transcript (markdown):');
+    lines.push(buildTranscriptMarkdown(data));
     lines.push('');
     lines.push('Claude summary (pulled from API):');
     lines.push(summary || '(No saved summary available)');
@@ -635,7 +714,7 @@
           <button class="rc-generate">☁ Generate Summary</button>
           <div class="rc-actions">
             <button class="rc-btn primary rc-copy-all" disabled>Copy All</button>
-            <button class="rc-btn rc-copy-json" disabled>Copy JSON</button>
+            <button class="rc-btn rc-copy-md" disabled>Copy Markdown</button>
             <button class="rc-btn rc-copy-summary" disabled>Copy Summary</button>
           </div>
           <div class="rc-status"></div>
@@ -655,11 +734,11 @@
     const statusEl = wrap.querySelector('.rc-status');
     const outEl = wrap.querySelector('.rc-out');
     const copyAll = wrap.querySelector('.rc-copy-all');
-    const copyJson = wrap.querySelector('.rc-copy-json');
+    const copyMd = wrap.querySelector('.rc-copy-md');
     const copySummary = wrap.querySelector('.rc-copy-summary');
     const closeBtn = wrap.querySelector('.rc-close');
 
-    let last = { output: '', json: '', summary: '' };
+    let last = { output: '', markdown: '', summary: '' };
 
     // Position the panel anchored to the cloud's current location.
     function positionPanel() {
@@ -733,11 +812,11 @@
       statusEl.className = 'rc-status' + (kind ? ' ' + kind : '');
     }
     function resetPanel() {
-      last = { output: '', json: '', summary: '' };
+      last = { output: '', markdown: '', summary: '' };
       outEl.classList.remove('visible');
       outEl.textContent = '';
       copyAll.disabled = true;
-      copyJson.disabled = true;
+      copyMd.disabled = true;
       copySummary.disabled = true;
       setStatus('');
     }
@@ -772,11 +851,12 @@
           const output = buildOutput(data);
           const chatMessages = (data && data.chat_messages) || [];
           const summary = (data && data.summary) || '';
-          last = { output, json: JSON.stringify(chatMessages, null, 2), summary };
+          const markdown = buildTranscriptMarkdown(data);
+          last = { output, markdown, summary };
           outEl.textContent = output;
           outEl.classList.add('visible');
           copyAll.disabled = false;
-          copyJson.disabled = false;
+          copyMd.disabled = false;
           copySummary.disabled = false;
           setStatus(
             '✓ Done. ' + chatMessages.length + ' message(s), ' +
@@ -794,7 +874,7 @@
     });
 
     copyAll.addEventListener('click', () => copyText(last.output, () => flash(copyAll)));
-    copyJson.addEventListener('click', () => copyText(last.json, () => flash(copyJson)));
+    copyMd.addEventListener('click', () => copyText(last.markdown, () => flash(copyMd)));
     copySummary.addEventListener('click', () => copyText(last.summary, () => flash(copySummary)));
 
     function flash(btn) {
@@ -839,6 +919,8 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       buildOutput,
+      buildTranscriptMarkdown,
+      messageMarkdown,
       msgText,
       entireInteractionText,
       lastMessageText,

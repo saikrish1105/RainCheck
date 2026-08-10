@@ -3,6 +3,8 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const {
   buildOutput,
+  buildTranscriptMarkdown,
+  messageMarkdown,
   msgText,
   entireInteractionText,
   lastMessageText,
@@ -10,6 +12,31 @@ const {
   parseUsageFromMessageLimit,
   formatResetCountdown,
 } = require('../src/content/isolated.js');
+
+// Realistic conversation matching the actual claude.ai JSON shape.
+const realData = {
+  name: 'Setting up Nextcloud server with Docker on Kali Linux',
+  summary: 'The person is a student setting up a personal homelab.',
+  chat_messages: [
+    {
+      uuid: '019f-x1', text: '', sender: 'human', index: 0, created_at: 't', updated_at: 't',
+      content: [{ start_timestamp: 't', stop_timestamp: 't', type: 'text', text: 'Help me set up Nextcloud with Docker.', citations: [] }],
+    },
+    {
+      uuid: '019f-x2', text: '', sender: 'assistant', index: 1, created_at: 't', updated_at: 't',
+      content: [
+        { type: 'thinking', thinking: '', summaries: [{ summary: 'Planning' }] },
+        { type: 'text', text: 'Create the project structure.', citations: [] },
+        { type: 'tool_use', id: 't1', name: 'memory_str_replace', input: { path: '/x', new_str: 'b' } },
+        { type: 'tool_use', id: 't2', name: 'create_file', input: { path: '/tmp/homelab-notes.md', file_text: '# Homelab\n\nDocs...' } },
+      ],
+    },
+    {
+      uuid: '019f-x3', text: '', sender: 'human', index: 2, created_at: 't', updated_at: 't',
+      content: [{ type: 'text', text: 'What about Proxmox?' }],
+    },
+  ],
+};
 
 const data = {
   name: 'Setup server',
@@ -26,7 +53,7 @@ test('buildOutput contains the continuation header', () => {
   assert.ok(out.includes('Do NOT restart from scratch'));
 });
 
-test('buildOutput contains Claude summary, entire interaction, last text, and JSON', () => {
+test('buildOutput contains Claude summary, entire interaction, last text, and transcript', () => {
   const out = buildOutput(data);
   assert.ok(out.includes('The summary of the text so far:'));
   assert.ok(out.includes('User set up Nextcloud with Docker.'));
@@ -34,8 +61,8 @@ test('buildOutput contains Claude summary, entire interaction, last text, and JS
   assert.ok(out.includes('Build a report'));
   assert.ok(out.includes('The last text before rate limit was hit:'));
   assert.ok(out.includes('Here is a partial document that got cut off'));
-  assert.ok(out.includes('Full chat JSON'));
-  assert.ok(out.includes('"uuid": "1"'));
+  assert.ok(out.includes('Full conversation transcript (markdown):'));
+  assert.ok(out.includes('### User 1'));
 });
 
 test('msgText handles nested message envelope and string content', () => {
@@ -73,6 +100,53 @@ test('empty conversation still produces a sensible output', () => {
   const out = buildOutput({ name: 'Empty', summary: '', chat_messages: [] });
   assert.ok(out.includes('(No saved summary available)'));
   assert.ok(out.includes('(No messages)'));
+});
+
+/* ---- Markdown transcript converter ---- */
+
+test('buildTranscriptMarkdown keeps title, summary and clean turns, drops noise', () => {
+  const md = buildTranscriptMarkdown(realData);
+  assert.ok(md.includes('# Setting up Nextcloud server'));
+  assert.ok(md.includes('## Session summary'));
+  assert.ok(md.includes('### User 1'));
+  assert.ok(md.includes('Help me set up Nextcloud with Docker.'));
+  assert.ok(md.includes('### Assistant 1'));
+  assert.ok(md.includes('Create the project structure.'));
+  assert.ok(md.includes('### User 2'));
+  assert.ok(md.includes('What about Proxmox?'));
+  // Noise that must be dropped:
+  assert.ok(!md.includes('019f-'), 'should drop uuid');
+  assert.ok(!md.includes('start_timestamp'), 'should drop timestamps');
+  assert.ok(!md.includes('memory_str_replace'), 'should drop internal tool plumbing');
+  assert.ok(!md.includes('summaries'), 'should drop thinking summaries');
+  assert.ok(!md.includes('citations'), 'should drop citations');
+});
+
+test('buildTranscriptMarkdown captures generated files as code blocks', () => {
+  const md = buildTranscriptMarkdown(realData);
+  assert.ok(md.includes('📄 **Generated file: /tmp/homelab-notes.md**'));
+  assert.ok(md.includes('```\n# Homelab\n\nDocs...\n```'));
+});
+
+test('messageMarkdown skips thinking/tool plumbing but keeps text and files', () => {
+  const assistant = realData.chat_messages[1];
+  const md = messageMarkdown(assistant);
+  assert.ok(md.includes('Create the project structure.'));
+  assert.ok(md.includes('Generated file'));
+  assert.ok(!md.includes('memory_str_replace'));
+  assert.ok(!md.includes('Planning'));
+});
+
+test('buildOutput includes the markdown transcript instead of raw JSON', () => {
+  const out = buildOutput(realData);
+  assert.ok(out.includes('Full conversation transcript (markdown):'));
+  assert.ok(!out.includes('"uuid"'), 'should not embed raw JSON uuid keys');
+  assert.ok(out.includes('### User 1'));
+});
+
+test('buildTranscriptMarkdown handles empty conversation', () => {
+  assert.equal(buildTranscriptMarkdown({ chat_messages: [] }), '(No messages)');
+  assert.equal(buildTranscriptMarkdown(null), '(No messages)');
 });
 
 /* ---- Usage parsing (claude-counter) ---- */
