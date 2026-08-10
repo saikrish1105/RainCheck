@@ -579,8 +579,8 @@
     style.textContent = `
 :host{all:initial;}
 *{box-sizing:border-box;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;}
-.rc-cloud{position:fixed;right:16px;bottom:16px;width:72px;height:72px;z-index:2147483647;cursor:grab;user-select:none;filter:drop-shadow(0 5px 12px rgba(0,0,0,.35));-webkit-tap-highlight-color:transparent;}
-.rc-cloud img{width:100%;height:100%;pointer-events:none;display:block;}
+.rc-cloud{position:fixed;right:40px;bottom:40px;width:72px;height:72px;z-index:2147483647;cursor:grab;user-select:none;filter:drop-shadow(0 5px 12px rgba(0,0,0,.35));-webkit-tap-highlight-color:transparent;}
+.rc-cloud img{width:150%;height:150%;pointer-events:none;display:block;}
 .rc-cloud.dragging{cursor:grabbing;opacity:.85;}
 .rc-panel{position:fixed;width:540px;max-width:calc(100vw - 32px);max-height:72vh;display:none;flex-direction:column;background:#1e1f24;border:1px solid #383a42;border-radius:14px;box-shadow:0 16px 44px rgba(0,0,0,.5);z-index:2147483646;overflow:hidden;color:#e7e7e7;font-size:13px;}
 .rc-panel.open{display:flex;}

@@ -1,11 +1,11 @@
 {
   "manifest_version": 3,
-  "name": "RainCheck Summary",
+  "name": "RainCheck",
   "version": "0.2.0",
-  "description": "Generate a rate-limit handoff summary + show Claude session/weekly usage bars for the current conversation.",
+  "description": "Shows you the exact amount of tokens used, as well as generates a summary for your conversation if you need to start the chat elsewhere.",
   "host_permissions": ["https://claude.ai/*"],
   "action": {
-    "default_title": "RainCheck Summary",
+    "default_title": "RainCheck",
     "default_popup": "src/options/popup.html",
     "default_icon": {
       "16": "src/assets/cloud.png",
