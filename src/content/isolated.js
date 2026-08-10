@@ -169,12 +169,6 @@
     lines.push('The summary of the text so far:');
     lines.push(summary || '(No saved summary available)');
     lines.push('');
-    lines.push('The entire text interaction:');
-    lines.push(entireInteractionText(chatMessages) || '(No messages)');
-    lines.push('');
-    lines.push('The last text before rate limit was hit:');
-    lines.push(lastMessageText(chatMessages) || '(No messages)');
-    lines.push('');
     lines.push('Full conversation transcript (markdown):');
     lines.push(buildTranscriptMarkdown(data));
     lines.push('');
