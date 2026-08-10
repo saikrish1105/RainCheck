@@ -1,6 +1,9 @@
 # Demo output
 demo/output/
 
+# Dependencies (jsdom is only for dev/test)
+node_modules/
+
 # Editor / OS
 .DS_Store
 *.swp

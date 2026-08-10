@@ -56,12 +56,14 @@ RainCheck/
 │   ├── content/
 │   │   ├── network-hook.js       MAIN world, document_start: tees fetch/XHR streams
 │   │   ├── bridge.js             ISOLATED world: assembles sessions, drives UI
-│   │   └── panel.js              floating shadow-DOM panel
+│   │   ├── panel.js              floating shadow-DOM panel
+│   │   └── isolated.js           ★ GENERATED bundle (parser-core+panel+bridge)
 │   ├── background/service-worker.js   settings + optional LLM summarizer
 │   └── options/                  settings page + action popup
-├── test/                         Node unit tests (+ realistic SSE fixture)
+├── scripts/build.js              bundles the isolated-world script
+├── test/                         Node unit + jsdom integration tests
 ├── demo/demo.js                  offline end-to-end simulation (no Claude needed)
-└── package.json                  npm test / npm run demo
+└── package.json                  npm test / npm run demo / npm run build
 ```
 
 ---
@@ -76,12 +78,29 @@ RainCheck/
 
 That's it. No build step, no bundler, no dependencies.
 
+### Build (one-time, after edits)
+
+The isolated-world content script is bundled into a single file so the whole UI layer is
+self-contained (see "Why a generated bundle" below). After editing any of
+`parser-core.js` / `panel.js` / `bridge.js`, regenerate it:
+
+```bash
+npm install   # dev dependency: jsdom (tests only)
+npm run build # regenerates src/content/isolated.js
+```
+
+> You only need `npm run build` if you change those files. The checked-in
+> `src/content/isolated.js` is already up to date.
+
 ### Test without Claude
 
 The core pipeline is fully offline-testable:
 
 ```bash
-npm test      # 14 unit tests (SSE, artifacts, rate-limit, reports, ZIP)
+npm test      # 17 tests: unit (SSE, artifacts, rate-limit, reports, ZIP)
+              #           + jsdom integration (loads real isolated.js in a DOM
+              #             window, creates the FAB/panel, feeds a streamed
+              #             artifact via postMessage and asserts it renders)
 npm run demo  # simulates a rate-limited stream and writes report/artifacts/transcript/zip
 ```
 
@@ -183,7 +202,12 @@ recovery, reporting, ZIP) is already implemented and tested.
 - Manifest V3 with two `content_scripts` entries: one in **`"world": "MAIN"`** (the hook,
   `document_start`) and one in the default **ISOLATED** world (bridge + panel). Cross-world
   messaging uses `window.postMessage` with a namespaced message + `source`/`origin` checks.
+- **Why a generated bundle?** Chrome runs the multiple JS files of one `content_scripts` entry
+  in a shared isolated world, but relying on a `globalThis` value set in one file and read in
+  a later file is fragile across Chrome versions/environments. So the ISOLATED world loads a
+  single self-contained file (`src/content/isolated.js`) produced by `scripts/build.js` from
+  `parser-core.js` + `panel.js` + `bridge.js`. This eliminates cross-file global dependencies.
 - Zero runtime dependencies — SSE parsing, artifact extraction, and the ZIP writer are all
-  hand-rolled and unit-tested.
+  hand-rolled and unit-tested. (`jsdom` is a dev dependency used only by the tests.)
 - The core logic in `src/shared/parser-core.js` runs in both the browser and Node, which is
   why the unit tests and demo exercise the *exact* code the extension ships.

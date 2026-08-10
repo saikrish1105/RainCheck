@@ -34,14 +34,14 @@
   "content_scripts": [
     {
       "matches": ["https://claude.ai/*", "https://*.claude.ai/*"],
-      "js": ["shared/parser-core.js", "content/network-hook.js"],
+      "js": ["content/network-hook.js"],
       "run_at": "document_start",
       "world": "MAIN",
       "all_frames": false
     },
     {
       "matches": ["https://claude.ai/*", "https://*.claude.ai/*"],
-      "js": ["shared/parser-core.js", "content/panel.js", "content/bridge.js"],
+      "js": ["content/isolated.js"],
       "run_at": "document_start",
       "world": "ISOLATED",
       "all_frames": false

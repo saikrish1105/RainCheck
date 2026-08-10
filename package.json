@@ -5,9 +5,13 @@
   "private": true,
   "scripts": {
     "test": "node --test \"test/**/*.test.js\"",
-    "demo": "node demo/demo.js"
+    "demo": "node demo/demo.js",
+    "build": "node scripts/build.js"
   },
   "engines": {
     "node": ">=18"
+  },
+  "devDependencies": {
+    "jsdom": "^30.0.1"
   }
 }
