@@ -1,7 +1,4 @@
-# Demo output
-demo/output/
-
-# Dependencies (jsdom is only for dev/test)
+# Dependencies (if any are added for dev/test)
 node_modules/
 
 # Editor / OS

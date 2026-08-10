@@ -1,50 +1,26 @@
 {
   "manifest_version": 3,
-  "name": "RainCheck — Claude Session Saver",
+  "name": "RainCheck Summary",
   "version": "0.1.0",
-  "description": "Recover your work when a Claude.ai session is interrupted by a rate limit: download hidden/partial artifacts, get a structured handoff summary, and resume on a fresh session.",
-  "permissions": ["storage", "downloads", "tabs"],
-  "host_permissions": [
-    "https://claude.ai/*",
-    "https://api.anthropic.com/*",
-    "https://api.openai.com/*",
-    "https://generativelanguage.googleapis.com/*"
-  ],
-  "background": {
-    "service_worker": "background/service-worker.js"
-  },
-  "options_ui": {
-    "page": "options/options.html",
-    "open_in_tab": true
-  },
-  "action": {
-    "default_title": "RainCheck",
-    "default_popup": "options/popup.html",
-    "default_icon": {
-      "16": "assets/icon128.png",
-      "48": "assets/icon128.png",
-      "128": "assets/icon128.png"
-    }
-  },
-  "icons": {
-    "16": "assets/icon128.png",
-    "48": "assets/icon128.png",
-    "128": "assets/icon128.png"
-  },
+  "description": "One button: generate a rate-limit handoff summary (chat JSON + Claude's saved summary) for the current Claude.ai conversation.",
+  "host_permissions": ["https://claude.ai/*"],
   "content_scripts": [
     {
       "matches": ["https://claude.ai/*", "https://*.claude.ai/*"],
-      "js": ["content/network-hook.js"],
-      "run_at": "document_start",
-      "world": "MAIN",
-      "all_frames": false
-    },
-    {
-      "matches": ["https://claude.ai/*", "https://*.claude.ai/*"],
-      "js": ["content/isolated.js"],
-      "run_at": "document_start",
-      "world": "ISOLATED",
-      "all_frames": false
+      "js": ["src/content/isolated.js"],
+      "run_at": "document_idle",
+      "world": "ISOLATED"
     }
-  ]
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": ["src/assets/cloud.png"],
+      "matches": ["https://claude.ai/*"]
+    }
+  ],
+  "icons": {
+    "16": "src/assets/cloud.png",
+    "48": "src/assets/cloud.png",
+    "128": "src/assets/cloud.png"
+  }
 }

@@ -1,17 +1,12 @@
 {
-  "name": "raincheck",
+  "name": "raincheck-summary",
   "version": "0.1.0",
-  "description": "Chrome extension that recovers your work when a Claude.ai session is interrupted by a rate limit.",
+  "description": "RainCheck Summary — minimal Chrome extension that generates a rate-limit handoff summary for the current Claude.ai conversation.",
   "private": true,
   "scripts": {
-    "test": "node --test \"test/**/*.test.js\"",
-    "demo": "node demo/demo.js",
-    "build": "node scripts/build.js"
+    "test": "node --test \"test/**/*.test.js\""
   },
   "engines": {
     "node": ">=18"
-  },
-  "devDependencies": {
-    "jsdom": "^30.0.1"
   }
 }
