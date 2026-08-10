@@ -138,6 +138,97 @@ test('DomExtractor scans a rendered conversation (existing chat)', () => {
   assert.ok(card.content.includes('Report'), 'artifact content preserved');
 });
 
+test('ApiLoader.normalize converts Claude API JSON into session shape', () => {
+  const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
+    url: 'https://claude.ai/chat/conv-abc',
+    runScripts: 'outside-only',
+    pretendToBeVisual: true,
+  });
+  const { window } = dom;
+  Object.defineProperty(window.document, 'readyState', { value: 'complete', configurable: true });
+  window.chrome = makeChromeStub();
+  window.eval(isolatedSrc);
+
+  const data = {
+    name: 'My Project',
+    chat_messages: [
+      {
+        sender: 'human',
+        content: [{ type: 'text', text: 'Build a report and a python script' }],
+      },
+      {
+        sender: 'assistant',
+        content: [
+          { type: 'text', text: 'Here you go.' },
+          {
+            type: 'tool_use',
+            id: 'toolu_1',
+            name: 'create_documents',
+            input: { content: 'print("hi")', type: 'application/vnd.ant.code', title: 'run.py', language: 'python' },
+          },
+          {
+            type: 'tool_use',
+            id: 'toolu_2',
+            name: 'create_documents',
+            input: { content: '# Report\n\ndone', type: 'text/markdown', title: 'report.md' },
+          },
+        ],
+      },
+    ],
+  };
+  const n = window.RC.ApiLoader.normalize(data);
+  assert.equal(n.title, 'My Project');
+  assert.equal(n.userMessages.length, 1);
+  assert.ok(n.userMessages[0].includes('Build a report'));
+  assert.equal(n.assistantMessages.length, 1);
+  assert.equal(n.artifacts.length, 2);
+  const code = n.artifacts.find((a) => a.title === 'run.py');
+  assert.equal(code.type, 'application/vnd.ant.code');
+  assert.equal(code.language, 'python');
+  const md = n.artifacts.find((a) => a.title === 'report.md');
+  assert.equal(md.type, 'text/markdown');
+});
+
+test('ApiLoader.loadConversation fetches org + conversation via session', async () => {
+  const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
+    url: 'https://claude.ai/chat/conv-abc',
+    runScripts: 'outside-only',
+    pretendToBeVisual: true,
+  });
+  const { window } = dom;
+  Object.defineProperty(window.document, 'readyState', { value: 'complete', configurable: true });
+  window.chrome = makeChromeStub();
+
+  const calls = [];
+  window.fetch = (url, opts) => {
+    calls.push({ url, opts });
+    if (url.includes('/chat_conversations/')) {
+      return Promise.resolve({
+        ok: true,
+        json: () =>
+          Promise.resolve({
+            name: 'Chat',
+            chat_messages: [
+              { sender: 'human', content: [{ type: 'text', text: 'hi' }] },
+              { sender: 'assistant', content: [{ type: 'text', text: 'hello' }] },
+            ],
+          }),
+      });
+    }
+    // organizations list
+    return Promise.resolve({ ok: true, json: () => Promise.resolve([{ uuid: 'org-1' }]) });
+  };
+
+  window.eval(isolatedSrc);
+  const conv = await window.RC.ApiLoader.loadConversation('conv-abc');
+  assert.ok(calls.length >= 2, 'should fetch organizations then conversation');
+  assert.ok(calls[1].url.includes('/organizations/org-1/chat_conversations/conv-abc'));
+  assert.ok(calls[0].opts.credentials === 'include', 'should send session credentials');
+  const n = window.RC.ApiLoader.normalize(conv);
+  assert.equal(n.userMessages.length, 1);
+  assert.equal(n.assistantMessages.length, 1);
+});
+
 test('bridge captures an artifact from a streamed postMessage and shows it in the panel', () => {
   const { window } = loadIsolated();
 

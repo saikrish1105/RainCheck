@@ -305,11 +305,67 @@
     panel.onDownloadTranscript = downloadTranscript;
     panel.onCopyContinuation = copyContinuation;
     panel.onScanConversation = scanCurrentConversation;
+    panel.onLoadConversationApi = loadConversationFromApi;
     panel.onOpenOptions = () => chrome.runtime.sendMessage({ type: 'open-options' });
     panel.update(buildState(sessions[activeConvId] || null));
     if (sessions[activeConvId] && (sessions[activeConvId].rateLimit || sessions[activeConvId].interrupted)) {
       panel.show();
     }
+  }
+
+  /* ---------------------------------------------------------- *
+   * Load a full conversation from Claude's internal API.
+   * ---------------------------------------------------------- */
+  function loadConversationFromApi() {
+    const button = panel && panel.els && panel.els.scanApi;
+    const setStatus = (t) => panel && panel.setScanStatus && panel.setScanStatus(t);
+    if (button) button.disabled = true;
+    setStatus('Loading full conversation from Claude API…');
+
+    const convId = activeConvId || convIdFromUrl();
+    if (!convId) {
+      setStatus('⚠ Open a conversation first (its URL contains the chat id).');
+      if (button) button.disabled = false;
+      return;
+    }
+    if (!RC.ApiLoader) {
+      setStatus('⚠ API loader not available. Reload the page and try again.');
+      if (button) button.disabled = false;
+      return;
+    }
+
+    RC.ApiLoader.loadConversation(convId)
+      .then((data) => {
+        const n = RC.ApiLoader.normalize(data || {});
+        if (!n.userMessages.length && !n.assistantMessages.length && !n.artifacts.length) {
+          setStatus('⚠ The API returned no recoverable content for this conversation.');
+          console.log('[RainCheck] API response had no content', data);
+          return;
+        }
+        const s = getSession(convId);
+        if (n.userMessages.length) s.userMessages = n.userMessages;
+        if (n.assistantMessages.length) s.assistantMessages = n.assistantMessages;
+        if (n.artifacts.length) s.artifacts = n.artifacts;
+        if (n.title && !s.title) s.title = n.title;
+        s.hasActivity = true;
+        s.touch();
+        refreshUI();
+        panel.show();
+        setStatus(
+          '✓ Loaded full conversation: ' + n.userMessages.length + ' user msg, ' +
+          n.assistantMessages.length + ' assistant msg, ' + n.artifacts.length + ' file(s).'
+        );
+        console.log('[RainCheck] API load complete:', {
+          user: n.userMessages.length, assistant: n.assistantMessages.length, artifacts: n.artifacts.length,
+        });
+      })
+      .catch((e) => {
+        console.error('[RainCheck] API load failed:', e);
+        setStatus('⚠ API load failed: ' + ((e && e.message) || e) + ' — try "Scan this page" instead.');
+      })
+      .finally(() => {
+        if (button) button.disabled = false;
+      });
   }
 
   /* ---------------------------------------------------------- *

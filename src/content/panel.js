@@ -96,9 +96,10 @@
             </div>
             <div class="rc-scan-section rc-section">
               <h3>Existing conversation</h3>
-              <p class="rc-muted" style="margin:0 0 8px;">Open a chat (old or new), then scan the page to pull already-rendered messages and files into RainCheck.</p>
+              <p class="rc-muted" style="margin:0 0 8px;">Open a chat (old or new) and recover everything already there — via Claude's API (reliable, full history) or by scanning the rendered page.</p>
               <div class="rc-row">
-                <button class="rc-btn small rc-scan">Scan this conversation</button>
+                <button class="rc-btn small rc-scan-api">Load full via API</button>
+                <button class="rc-btn secondary small rc-scan">Scan this page</button>
               </div>
               <div class="rc-scan-status rc-muted" style="margin-top:8px;"></div>
             </div>
@@ -130,6 +131,7 @@
         contText: rootEl.querySelector('.rc-cont-text'),
         copyCont: rootEl.querySelector('.rc-copy-cont'),
         scan: rootEl.querySelector('.rc-scan'),
+        scanApi: rootEl.querySelector('.rc-scan-api'),
         scanStatus: rootEl.querySelector('.rc-scan-status'),
         options: rootEl.querySelector('.rc-options'),
       };
@@ -140,6 +142,7 @@
       this.els.dlTranscript.addEventListener('click', () => this.onDownloadTranscript && this.onDownloadTranscript(this.state));
       this.els.copyCont.addEventListener('click', () => this.onCopyContinuation && this.onCopyContinuation(this.state));
       this.els.scan.addEventListener('click', () => this.onScanConversation && this.onScanConversation());
+      this.els.scanApi.addEventListener('click', () => this.onLoadConversationApi && this.onLoadConversationApi());
       this.els.options.addEventListener('click', () => this.onOpenOptions && this.onOpenOptions());
     }
 

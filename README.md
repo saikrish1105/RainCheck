@@ -56,9 +56,10 @@ RainCheck/
 │   ├── content/
 │   │   ├── network-hook.js       MAIN world, document_start: tees fetch/XHR streams
 │   │   ├── dom-extractor.js      reads already-rendered conversations from the DOM
+│   │   ├── api-loader.js         loads a full conversation from Claude's own API
 │   │   ├── bridge.js             ISOLATED world: assembles sessions, drives UI
 │   │   ├── panel.js              floating shadow-DOM panel
-│   │   └── isolated.js           ★ GENERATED bundle (parser-core+dom-extractor+panel+bridge)
+│   │   └── isolated.js           ★ GENERATED bundle (core+extractors+panel+bridge)
 │   ├── background/service-worker.js   settings + optional LLM summarizer
 │   └── options/                  settings page + action popup
 ├── scripts/build.js              bundles the isolated-world script
@@ -98,10 +99,11 @@ npm run build # regenerates src/content/isolated.js
 The core pipeline is fully offline-testable:
 
 ```bash
-npm test      # 18 tests: unit (SSE, artifacts, rate-limit, reports, ZIP)
+npm test      # 20 tests: unit (SSE, artifacts, rate-limit, reports, ZIP)
               #           + jsdom integration (loads real isolated.js in a DOM
               #             window, creates the FAB/panel, feeds a streamed
-              #             artifact via postMessage, and DOM-scans a rendered chat)
+              #             artifact, DOM-scans a rendered chat, and exercises the
+              #             API conversation loader against a stubbed fetch)
 npm run demo  # simulates a rate-limited stream and writes report/artifacts/transcript/zip
 ```
 
@@ -148,28 +150,40 @@ opened, that auto-collapsed, or that got cut off are captured:
 
 ---
 
-## Feature 3 — scan an existing conversation (DOM extraction)
+## Feature 3 — load an existing conversation
 
-Open any chat (old or new) and hit **"Scan this conversation"** in the panel. RainCheck reads
-the **already-rendered DOM** — no network interception needed — and recovers:
+Open any chat (old or new) and use the **"Existing conversation"** section of the panel. Two
+ways to recover everything already there:
 
-- the full transcript (user + assistant messages),
-- rendered artifacts / code blocks (via the "Existing conversation" section),
+### Option A — Load full via API (recommended)
+This asks **Claude's own internal API** for the whole conversation as JSON
+(`GET /api/organizations/{orgId}/chat_conversations/{conversationId}`), using your existing
+logged-in session (same-origin `fetch` with cookies). It returns **every message, artifact and
+file, in order** — even for long chats, and it isn't broken by CSS/markup changes (Claude only
+keeps a *window* of a long conversation mounted in the DOM, so page-scraping truncates long
+chats). This is the same technique open-source claude.ai exporters use.
 
-then exposes the usual Download / Download all / Transcript / Continuation-prompt actions.
-This is what makes existing conversations recoverable retroactively.
+### Option B — Scan this page (DOM fallback)
+Reads the currently-rendered DOM. Useful if the API is unreachable, but limited to what's
+currently mounted on screen.
 
-### Tuning DOM selectors
+Either way, the recovered transcript + artifacts flow into the usual Download / Download-all /
+Transcript / Continuation-prompt actions.
 
-DOM extraction relies on heuristic selectors (centralized in `src/content/dom-extractor.js`
-in the `SELECTORS` table). If a Claude update changes its markup and scanning stops finding
-content, the fastest fix is a small DOM snapshot. On the claude.ai page, in the console run:
+### Why the earlier DOM selectors failed
+RainCheck originally scanned the page using `data-testid="user-message"` /
+`data-testid="assistant-message"`. The current claude.ai markup doesn't expose those, which is
+why "Scan this page" found nothing on a real chat. The **API loader (Option A) sidesteps
+fragile selectors entirely** — that's why it's now the primary path.
+
+### If the API loader doesn't work on your session
+The API shape is stable but undocumented, and it may vary by account/region. If "Load full via
+API" fails, paste the error text from the panel here, and/or run this in the claude.ai console
+and share the result so I can confirm the org-id endpoint shape:
 
 ```js
-copy(document.querySelector('[data-testid="user-message"], [data-testid="assistant-message"]')?.outerHTML)
+fetch('https://claude.ai/api/organizations',{credentials:'include'}).then(r=>r.text()).then(t=>console.log(t.slice(0,500)))
 ```
-
-and paste it to me — I'll adjust `SELECTORS` accordingly.
 
 ---
 
