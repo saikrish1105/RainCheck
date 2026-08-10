@@ -286,6 +286,7 @@
 
   function refreshUI() {
     ensurePanel();
+    if (!panel) return; // panel creation is deferred until DOMContentLoaded
     panel.update(buildState(sessions[activeConvId] || null));
     const s = sessions[activeConvId];
     // Auto-open the panel the moment a rate limit / interruption is detected.
@@ -339,7 +340,7 @@
         const n = RC.ApiLoader.normalize(data || {});
         if (!n.userMessages.length && !n.assistantMessages.length && !n.artifacts.length) {
           setStatus('⚠ The API returned no recoverable content for this conversation.');
-          console.log('[RainCheck] API response had no content', data);
+          console.log('[RainCheck] API response had no content. top-level keys:', n.rawKeys, 'sample:', String(JSON.stringify(data)).slice(0, 800));
           return;
         }
         const s = getSession(convId);

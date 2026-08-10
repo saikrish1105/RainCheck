@@ -1017,16 +1017,26 @@
 
   /**
    * Convert the raw API conversation JSON into the RainCheck session shape.
-   * Returns { title, userMessages, assistantMessages, artifacts }.
+   * Returns { title, userMessages, assistantMessages, artifacts, rawKeys }.
    */
   function normalize(data) {
     const title = data.name || data.title || '';
-    const messages = data.chat_messages || data.messages || [];
+    // chat_messages is the shape used by the community exporters; also handle
+    // messages / items / turns as common alternates.
+    const messages =
+      data.chat_messages ||
+      data.messages ||
+      data.items ||
+      data.turns ||
+      (Array.isArray(data) ? data : []) ||
+      [];
+
     const userMessages = [];
     const assistantMessages = [];
     const artifacts = [];
 
     for (const m of messages) {
+      if (!m || typeof m !== 'object') continue;
       const sender = m.sender || m.role || '';
       const content = Array.isArray(m.content)
         ? m.content
@@ -1065,7 +1075,7 @@
       }
     }
 
-    return { title, userMessages, assistantMessages, artifacts };
+    return { title, userMessages, assistantMessages, artifacts, rawKeys: Object.keys(data || {}) };
   }
 
   root.RC.ApiLoader = { loadConversation, normalize, getOrgId };
@@ -1646,6 +1656,7 @@
 
   function refreshUI() {
     ensurePanel();
+    if (!panel) return; // panel creation is deferred until DOMContentLoaded
     panel.update(buildState(sessions[activeConvId] || null));
     const s = sessions[activeConvId];
     // Auto-open the panel the moment a rate limit / interruption is detected.
@@ -1699,7 +1710,7 @@
         const n = RC.ApiLoader.normalize(data || {});
         if (!n.userMessages.length && !n.assistantMessages.length && !n.artifacts.length) {
           setStatus('⚠ The API returned no recoverable content for this conversation.');
-          console.log('[RainCheck] API response had no content', data);
+          console.log('[RainCheck] API response had no content. top-level keys:', n.rawKeys, 'sample:', String(JSON.stringify(data)).slice(0, 800));
           return;
         }
         const s = getSession(convId);
