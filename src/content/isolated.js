@@ -1067,7 +1067,16 @@
 
     for (const m of messages) {
       if (!m || typeof m !== 'object') continue;
-      const sender = m.sender || m.role || '';
+      const sender = m.sender || m.role || m.type || '';
+
+      // Some responses put the whole message in a direct `text` field.
+      if (typeof m.text === 'string' && m.text.trim().length > 0) {
+        const t = m.text.trim();
+        if (sender === 'human' || sender === 'user') userMessages.push(t);
+        else if (sender === 'assistant') assistantMessages.push(t);
+        continue;
+      }
+
       const content = Array.isArray(m.content)
         ? m.content
         : typeof m.content === 'string'

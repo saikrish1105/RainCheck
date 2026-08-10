@@ -153,13 +153,18 @@ test('ApiLoader.normalize converts Claude API JSON into session shape', () => {
     name: 'My Project',
     chat_messages: [
       {
+        uuid: '019f-1',
         sender: 'human',
-        content: [{ type: 'text', text: 'Build a report and a python script' }],
+        text: 'Build a report and a python script', // observed claude.ai shape
+      },
+      {
+        uuid: '019f-2',
+        sender: 'assistant',
+        text: 'Here you go.',
       },
       {
         sender: 'assistant',
         content: [
-          { type: 'text', text: 'Here you go.' },
           {
             type: 'tool_use',
             id: 'toolu_1',
@@ -180,7 +185,7 @@ test('ApiLoader.normalize converts Claude API JSON into session shape', () => {
   assert.equal(n.title, 'My Project');
   assert.equal(n.userMessages.length, 1);
   assert.ok(n.userMessages[0].includes('Build a report'));
-  assert.equal(n.assistantMessages.length, 1);
+  assert.equal(n.assistantMessages.length, 1); // direct-text assistant message (tool_use block only contributes artifacts)
   assert.equal(n.artifacts.length, 2);
   const code = n.artifacts.find((a) => a.title === 'run.py');
   assert.equal(code.type, 'application/vnd.ant.code');
