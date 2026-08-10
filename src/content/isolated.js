@@ -207,7 +207,8 @@
 `;
     shadow.appendChild(style);
 
-    host.innerHTML = `
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
       <div class="rc-panel">
         <div class="rc-head">
           <img src="${chrome.runtime.getURL('src/assets/cloud.png')}" alt="" />
@@ -230,8 +231,9 @@
         <img src="${chrome.runtime.getURL('src/assets/cloud.png')}" alt="RainCheck" />
       </div>
     `;
+    shadow.appendChild(wrap);
 
-    const rootEl = shadow.querySelector('.rc-panel').parentElement;
+    const rootEl = wrap;
     const cloud = rootEl.querySelector('.rc-cloud');
     const panel = rootEl.querySelector('.rc-panel');
     const generateBtn = rootEl.querySelector('.rc-generate');
