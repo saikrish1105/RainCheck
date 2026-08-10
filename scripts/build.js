@@ -18,6 +18,7 @@ const path = require('node:path');
 const src = path.join(__dirname, '..', 'src');
 const files = [
   path.join(src, 'shared', 'parser-core.js'),
+  path.join(src, 'content', 'dom-extractor.js'),
   path.join(src, 'content', 'panel.js'),
   path.join(src, 'content', 'bridge.js'),
 ];

@@ -109,6 +109,35 @@ test('bridge exposes a working session pipeline inside the window', () => {
   assert.equal(arts[0].open, true);
 });
 
+test('DomExtractor scans a rendered conversation (existing chat)', () => {
+  const dom = new JSDOM(
+    '<!DOCTYPE html><html><head><title>My Chat</title></head><body>' +
+      '<div data-testid="user-message">Build a report</div>' +
+      '<div data-testid="assistant-message"><p>Here is the report.</p><pre><code>print(1)</code></pre></div>' +
+      '<div data-testid="user-message">Make a PDF too</div>' +
+      '<div data-testid="artifact-card">' +
+      '  <header><h3>report.md</h3></header>' +
+      '  <div class="artifact-content"># Report\n\ndone</div>' +
+      '</div>' +
+      '</body></html>',
+    { url: 'https://claude.ai/chat/conv-123', runScripts: 'outside-only', pretendToBeVisual: true }
+  );
+  const { window } = dom;
+  Object.defineProperty(window.document, 'readyState', { value: 'complete', configurable: true });
+  window.chrome = makeChromeStub();
+  window.eval(isolatedSrc);
+
+  const result = window.RC.DomExtractor.scan();
+  assert.ok(result.found, 'scan should find content');
+  assert.equal(result.userMessages.length, 2, 'should find 2 user messages');
+  assert.ok(result.assistantMessages.length >= 1, 'should find assistant message');
+  assert.ok(result.artifacts.length >= 1, 'should find artifacts (code block + card)');
+  const card = result.artifacts.find((a) => a.title === 'report.md');
+  assert.ok(card, 'should recover the artifact card by title');
+  assert.equal(card.type, 'text/markdown', 'report.md inferred as markdown');
+  assert.ok(card.content.includes('Report'), 'artifact content preserved');
+});
+
 test('bridge captures an artifact from a streamed postMessage and shows it in the panel', () => {
   const { window } = loadIsolated();
 

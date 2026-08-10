@@ -94,6 +94,14 @@
                 <button class="rc-btn secondary small rc-dl-transcript">Download transcript (.md)</button>
               </div>
             </div>
+            <div class="rc-scan-section rc-section">
+              <h3>Existing conversation</h3>
+              <p class="rc-muted" style="margin:0 0 8px;">Open a chat (old or new), then scan the page to pull already-rendered messages and files into RainCheck.</p>
+              <div class="rc-row">
+                <button class="rc-btn small rc-scan">Scan this conversation</button>
+              </div>
+              <div class="rc-scan-status rc-muted" style="margin-top:8px;"></div>
+            </div>
             <div class="rc-cont-section rc-section">
               <h3>Resume on a fresh session</h3>
               <div class="rc-textblock rc-cont-text"></div>
@@ -121,6 +129,8 @@
         dlTranscript: rootEl.querySelector('.rc-dl-transcript'),
         contText: rootEl.querySelector('.rc-cont-text'),
         copyCont: rootEl.querySelector('.rc-copy-cont'),
+        scan: rootEl.querySelector('.rc-scan'),
+        scanStatus: rootEl.querySelector('.rc-scan-status'),
         options: rootEl.querySelector('.rc-options'),
       };
 
@@ -129,6 +139,7 @@
       this.els.dlAll.addEventListener('click', () => this.onDownloadAll && this.onDownloadAll(this.state));
       this.els.dlTranscript.addEventListener('click', () => this.onDownloadTranscript && this.onDownloadTranscript(this.state));
       this.els.copyCont.addEventListener('click', () => this.onCopyContinuation && this.onCopyContinuation(this.state));
+      this.els.scan.addEventListener('click', () => this.onScanConversation && this.onScanConversation());
       this.els.options.addEventListener('click', () => this.onOpenOptions && this.onOpenOptions());
     }
 
@@ -252,6 +263,10 @@
         this.els.contText.textContent = 'A ready-to-paste continuation prompt appears here after session activity is captured.';
         this.els.copyCont.disabled = true;
       }
+    }
+
+    setScanStatus(text) {
+      if (this.els.scanStatus) this.els.scanStatus.textContent = text || '';
     }
 
     emptyEl(text) {

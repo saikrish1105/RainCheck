@@ -55,9 +55,10 @@ RainCheck/
 │   │                                report, ZIP) — browser + Node (unit-tested)
 │   ├── content/
 │   │   ├── network-hook.js       MAIN world, document_start: tees fetch/XHR streams
+│   │   ├── dom-extractor.js      reads already-rendered conversations from the DOM
 │   │   ├── bridge.js             ISOLATED world: assembles sessions, drives UI
 │   │   ├── panel.js              floating shadow-DOM panel
-│   │   └── isolated.js           ★ GENERATED bundle (parser-core+panel+bridge)
+│   │   └── isolated.js           ★ GENERATED bundle (parser-core+dom-extractor+panel+bridge)
 │   ├── background/service-worker.js   settings + optional LLM summarizer
 │   └── options/                  settings page + action popup
 ├── scripts/build.js              bundles the isolated-world script
@@ -97,10 +98,10 @@ npm run build # regenerates src/content/isolated.js
 The core pipeline is fully offline-testable:
 
 ```bash
-npm test      # 17 tests: unit (SSE, artifacts, rate-limit, reports, ZIP)
+npm test      # 18 tests: unit (SSE, artifacts, rate-limit, reports, ZIP)
               #           + jsdom integration (loads real isolated.js in a DOM
               #             window, creates the FAB/panel, feeds a streamed
-              #             artifact via postMessage and asserts it renders)
+              #             artifact via postMessage, and DOM-scans a rendered chat)
 npm run demo  # simulates a rate-limited stream and writes report/artifacts/transcript/zip
 ```
 
@@ -139,6 +140,36 @@ opened, that auto-collapsed, or that got cut off are captured:
 - **Download all (.zip)** — a dependency-free ZIP writer builds the archive in-browser.
 - File type is inferred from the artifact MIME type (and the `language` attribute for code),
   so `text/markdown` → `.md`, `application/vnd.ant.code`+`language=python` → `.py`, etc.
+
+> **Known limitation — PDFs.** Claude delivers generated PDFs as binary assets through a
+> *separate* mechanism, not as streamed `<antArtifact>` text. So the stream parser won't
+> capture PDFs. Use the **"Scan this conversation"** feature below (or Claude's own download
+> button) to get PDFs.
+
+---
+
+## Feature 3 — scan an existing conversation (DOM extraction)
+
+Open any chat (old or new) and hit **"Scan this conversation"** in the panel. RainCheck reads
+the **already-rendered DOM** — no network interception needed — and recovers:
+
+- the full transcript (user + assistant messages),
+- rendered artifacts / code blocks (via the "Existing conversation" section),
+
+then exposes the usual Download / Download all / Transcript / Continuation-prompt actions.
+This is what makes existing conversations recoverable retroactively.
+
+### Tuning DOM selectors
+
+DOM extraction relies on heuristic selectors (centralized in `src/content/dom-extractor.js`
+in the `SELECTORS` table). If a Claude update changes its markup and scanning stops finding
+content, the fastest fix is a small DOM snapshot. On the claude.ai page, in the console run:
+
+```js
+copy(document.querySelector('[data-testid="user-message"], [data-testid="assistant-message"]')?.outerHTML)
+```
+
+and paste it to me — I'll adjust `SELECTORS` accordingly.
 
 ---
 

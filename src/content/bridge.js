@@ -304,11 +304,67 @@
     panel.onDownloadAll = downloadAll;
     panel.onDownloadTranscript = downloadTranscript;
     panel.onCopyContinuation = copyContinuation;
+    panel.onScanConversation = scanCurrentConversation;
     panel.onOpenOptions = () => chrome.runtime.sendMessage({ type: 'open-options' });
     panel.update(buildState(sessions[activeConvId] || null));
     if (sessions[activeConvId] && (sessions[activeConvId].rateLimit || sessions[activeConvId].interrupted)) {
       panel.show();
     }
+  }
+
+  /* ---------------------------------------------------------- *
+   * DOM scanning of an existing conversation
+   * ---------------------------------------------------------- */
+  function scanCurrentConversation() {
+    const button = panel && panel.els && panel.els.scan;
+    const setStatus = (t) => panel && panel.setScanStatus && panel.setScanStatus(t);
+    if (button) button.disabled = true;
+    setStatus('Scanning page…');
+
+    // Let the UI paint the "scanning" state before the synchronous scan.
+    setTimeout(() => {
+      try {
+        if (!RC.DomExtractor) {
+          setStatus('⚠ DOM scanner not available. Reload the page and try again.');
+          if (button) button.disabled = false;
+          return;
+        }
+        const result = RC.DomExtractor.scan();
+
+        if (!result.found) {
+          setStatus('⚠ Could not find any conversation content. Make sure a chat is open and fully loaded, then try again.');
+          if (button) button.disabled = false;
+          return;
+        }
+
+        const s = getSession(activeConvId || 'current');
+        // Merge: only replace if we found more than what we already had.
+        if (result.userMessages.length) s.userMessages = result.userMessages;
+        if (result.assistantMessages.length) s.assistantMessages = result.assistantMessages;
+        if (result.artifacts.length) s.artifacts = result.artifacts;
+        if (!s.title && result.title) s.title = result.title;
+        s.hasActivity = true;
+        s.touch();
+
+        refreshUI();
+        panel.show();
+        setStatus(
+          '✓ Recovered ' + result.userMessages.length + ' user msg, ' +
+          result.assistantMessages.length + ' assistant msg, ' +
+          result.artifacts.length + ' file(s) from the page.'
+        );
+        console.log('[RainCheck] DOM scan complete:', {
+          user: result.userMessages.length,
+          assistant: result.assistantMessages.length,
+          artifacts: result.artifacts.length,
+        });
+      } catch (e) {
+        console.error('[RainCheck] DOM scan failed:', e);
+        setStatus('⚠ Scan failed: ' + ((e && e.message) || e));
+      } finally {
+        if (button) button.disabled = false;
+      }
+    }, 30);
   }
 
   /* ---------------------------------------------------------- *
