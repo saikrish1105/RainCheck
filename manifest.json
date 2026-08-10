@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "RainCheck Summary",
-  "version": "0.1.0",
-  "description": "One button: generate a rate-limit handoff summary (chat JSON + Claude's saved summary) for the current Claude.ai conversation.",
+  "version": "0.2.0",
+  "description": "Generate a rate-limit handoff summary + show Claude session/weekly usage bars (claude-counter style) for the current Claude.ai conversation.",
   "host_permissions": ["https://claude.ai/*"],
   "content_scripts": [
     {
@@ -14,7 +14,7 @@
   ],
   "web_accessible_resources": [
     {
-      "resources": ["src/assets/cloud.png"],
+      "resources": ["src/assets/cloud.png", "src/injected/bridge.js"],
       "matches": ["https://claude.ai/*"]
     }
   ],

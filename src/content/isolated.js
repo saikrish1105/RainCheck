@@ -1,35 +1,29 @@
 /**
- * isolated.js — RainCheck Summary (minimal).
+ * isolated.js — RainCheck Summary + Claude Counter (usage bars).
  *
- * A single self-contained content script. It adds a small draggable cloud
- * button to claude.ai. Clicking it opens a panel with ONE action: "Generate
- * Summary". Pressing it pulls the current conversation from Claude's own API
- * (using your existing session) and produces a rate-limit handoff text
- * containing:
- *   - the continuation header,
- *   - Claude's saved summary of the text so far,
- *   - the entire text interaction,
- *   - the last text before the rate limit was hit,
- *   - the full chat JSON, and
- *   - Claude's summary again (from the API).
+ * Single self-contained ISOLATED-world content script. It provides:
  *
- * Nothing happens automatically. State is per-tab: a fresh/new page shows an
- * empty panel, and navigating to another conversation reloads that page's
- * details on demand.
+ *  1) A draggable cloud button → panel with "Generate Summary" (pull current
+ *     conversation from Claude's API: chat JSON + saved summary).
  *
- * The pure text-building logic is exported via CommonJS so it can be unit
- * tested in Node; the DOM/UI code only runs when `document` is present.
+ *  2) Claude Counter usage bars — session (5h) and weekly (7d) utilization
+ *     percentages with progress bars and reset countdowns. Data comes from:
+ *       - GET /api/organizations/{orgId}/usage  (utilization % + resets_at)
+ *       - live `message_limit` SSE events (utilization 0..1 + resets_at sec)
+ *     These are injected into the chat UI (usage line near the model selector).
+ *     No token counts are shown (the API only exposes percentages).
+ *
+ * Uses an injected MAIN-world bridge (src/injected/bridge.js) that intercepts
+ * fetch to read `message_limit` SSE events and answers usage requests.
+ *
+ * Pure logic is CommonJS-exported for unit testing.
  */
 (function () {
   'use strict';
 
-  const API_ROOT = 'https://claude.ai/api';
-
   /* ==================================================================
-   * Pure helpers (no DOM) — unit-testable in Node.
+   * 1. SUMMARY — pure helpers (no DOM)
    * ================================================================== */
-
-  /** Extract the text of a single chat message (handles both shapes). */
   function msgText(m) {
     if (!m || typeof m !== 'object') return '';
     if (typeof m.text === 'string') return m.text;
@@ -42,7 +36,6 @@
     return '';
   }
 
-  /** Extract the last meaningful text before the rate limit / cut-off. */
   function lastMessageText(chatMessages) {
     const arr = Array.isArray(chatMessages) ? chatMessages : [];
     for (let i = arr.length - 1; i >= 0; i--) {
@@ -52,7 +45,6 @@
     return '';
   }
 
-  /** Join every message's text in order into one block. */
   function entireInteractionText(chatMessages) {
     const arr = Array.isArray(chatMessages) ? chatMessages : [];
     const parts = [];
@@ -63,10 +55,6 @@
     return parts.join('\n\n');
   }
 
-  /**
-   * Build the full handoff output string.
-   * data: the raw conversation JSON from the API (has .chat_messages and .summary).
-   */
   function buildOutput(data) {
     const chatMessages =
       (data && (Array.isArray(data.chat_messages) ? data.chat_messages : [])) || [];
@@ -104,43 +92,74 @@
   }
 
   /* ==================================================================
-   * API access.
+   * 2. USAGE — pure helpers (formatting)
    * ================================================================== */
-
-  function getOrgId() {
-    return fetch(API_ROOT + '/organizations', {
-      credentials: 'include',
-      headers: { 'content-type': 'application/json' },
-    })
-      .then((r) => {
-        if (!r.ok) throw new Error('organizations API error ' + r.status);
-        return r.json();
-      })
-      .then((orgs) => {
-        if (Array.isArray(orgs) && orgs.length && orgs[0].uuid) return orgs[0].uuid;
-        if (orgs && typeof orgs === 'object' && orgs.uuid) return orgs.uuid;
-        throw new Error('Could not determine your Claude organization id');
-      });
+  function formatResetCountdown(timestampMs) {
+    const diffMs = timestampMs - Date.now();
+    if (diffMs <= 0) return '0s';
+    const totalSeconds = Math.floor(diffMs / 1000);
+    if (totalSeconds < 60) return `${totalSeconds}s`;
+    const totalMinutes = Math.round(totalSeconds / 60);
+    if (totalMinutes < 60) return `${totalMinutes}m`;
+    const hours = Math.floor(totalMinutes / 60);
+    const minutes = totalMinutes % 60;
+    if (hours < 24) return `${hours}h ${minutes}m`;
+    const days = Math.floor(hours / 24);
+    const remHours = hours % 24;
+    return `${days}d ${remHours}h`;
   }
 
-  function loadConversation(conversationId) {
-    return getOrgId().then((orgId) => {
-      const params = '?tree=true&rendering_mode=messages&render_all_tools=true';
-      const url =
-        API_ROOT +
-        '/organizations/' +
-        encodeURIComponent(orgId) +
-        '/chat_conversations/' +
-        encodeURIComponent(conversationId) +
-        params;
-      return fetch(url, {
-        credentials: 'include',
-        headers: { 'content-type': 'application/json' },
-      }).then((res) => {
-        if (!res.ok) throw new Error('conversation API error ' + res.status);
-        return res.json();
-      });
-    });
+  // Parse /usage endpoint response: utilization is 0..100, resets_at is ISO.
+  function parseUsageFromEndpoint(raw) {
+    if (!raw || typeof raw !== 'object') return null;
+    const norm = (w, hours) => {
+      if (!w || typeof w !== 'object') return null;
+      if (typeof w.utilization !== 'number' || !Number.isFinite(w.utilization)) return null;
+      const utilization = Math.max(0, Math.min(100, w.utilization));
+      const resets_at = typeof w.resets_at === 'string' ? w.resets_at : null;
+      return { utilization, resets_at, window_hours: hours };
+    };
+    const fiveHour = norm(raw.five_hour, 5);
+    const sevenDay = norm(raw.seven_day, 24 * 7);
+    if (!fiveHour && !sevenDay) return null;
+    return { five_hour: fiveHour, seven_day: sevenDay };
+  }
+
+  // Parse message_limit SSE event: utilization is 0..1, resets_at is epoch sec.
+  function parseUsageFromMessageLimit(raw) {
+    if (!raw?.windows || typeof raw.windows !== 'object') return null;
+    const norm = (w, hours) => {
+      if (!w || typeof w !== 'object') return null;
+      if (typeof w.utilization !== 'number' || !Number.isFinite(w.utilization)) return null;
+      const utilization = Math.max(0, Math.min(100, w.utilization * 100));
+      const resets_at =
+        typeof w.resets_at === 'number' && Number.isFinite(w.resets_at)
+          ? new Date(w.resets_at * 1000).toISOString()
+          : null;
+      return { utilization, resets_at, window_hours: hours };
+    };
+    const fiveHour = norm(raw.windows['5h'], 5);
+    const sevenDay = norm(raw.windows['7d'], 24 * 7);
+    if (!fiveHour && !sevenDay) return null;
+    return { five_hour: fiveHour, seven_day: sevenDay };
+  }
+
+  /* ==================================================================
+   * Shared helpers
+   * ================================================================== */
+  const API_ROOT = 'https://claude.ai/api';
+
+  function getOrgIdFromCookie() {
+    try {
+      return (
+        document.cookie
+          .split('; ')
+          .find((row) => row.startsWith('lastActiveOrg='))
+          ?.split('=')[1] || null
+      );
+    } catch {
+      return null;
+    }
   }
 
   function convIdFromUrl() {
@@ -148,9 +167,31 @@
     return m ? m[1] : null;
   }
 
-  /* ==================================================================
-   * DOM / UI — only runs in the browser.
-   * ================================================================== */
+  function waitForElement(selector, timeoutMs) {
+    return new Promise((resolve) => {
+      const existing = document.querySelector(selector);
+      if (existing) {
+        resolve(existing);
+        return;
+      }
+      let timeoutId;
+      const observer = new MutationObserver(() => {
+        const el = document.querySelector(selector);
+        if (el) {
+          if (timeoutId) clearTimeout(timeoutId);
+          observer.disconnect();
+          resolve(el);
+        }
+      });
+      observer.observe(document.body, { childList: true, subtree: true });
+      if (timeoutMs) {
+        timeoutId = setTimeout(() => {
+          observer.disconnect();
+          resolve(null);
+        }, timeoutMs);
+      }
+    });
+  }
 
   function copyText(text, done) {
     const cb = () => done && done();
@@ -173,7 +214,363 @@
     done();
   }
 
-  function initUI() {
+  /* ==================================================================
+   * Bridge client — talk to the injected MAIN-world bridge via postMessage.
+   * ================================================================== */
+  function makeBridgeClient() {
+    const pending = new Map();
+    let readyPromise = null;
+
+    function getRuntime() {
+      return globalThis.browser?.runtime || globalThis.chrome?.runtime || null;
+    }
+
+    function makeRequestId() {
+      return `${Date.now()}-${Math.random().toString(16).slice(2)}`;
+    }
+
+    function injectBridgeOnce() {
+      if (readyPromise) return readyPromise;
+      const runtime = getRuntime();
+      if (!runtime) return Promise.resolve(false);
+      if (document.getElementById('cc-bridge-script')) return Promise.resolve(true);
+
+      readyPromise = new Promise((resolve) => {
+        const script = document.createElement('script');
+        script.id = 'cc-bridge-script';
+        script.src = runtime.getURL('src/injected/bridge.js');
+        script.onload = () => resolve(true);
+        script.onerror = () => resolve(false);
+        (document.head || document.documentElement).appendChild(script);
+      });
+      return readyPromise;
+    }
+
+    function request(kind, payload, { timeoutMs = 10000 } = {}) {
+      const requestId = makeRequestId();
+      return new Promise((resolve, reject) => {
+        const timeoutId = setTimeout(() => {
+          pending.delete(requestId);
+          reject(new Error(`Bridge request timed out (${kind})`));
+        }, timeoutMs);
+        pending.set(requestId, { resolve, reject, timeoutId });
+        window.postMessage(
+          { cc: 'ClaudeCounter', type: 'cc:request', requestId, kind, payload },
+          '*'
+        );
+      });
+    }
+
+    function requestUsage(orgId) {
+      return request('usage', { orgId }, { timeoutMs: 15000 });
+    }
+
+    window.addEventListener('message', (event) => {
+      if (event.source !== window) return;
+      const data = event.data;
+      if (!data || data.cc !== 'ClaudeCounter') return;
+      if (data.type === 'cc:response') {
+        const { requestId, ok, payload, error } = data;
+        const p = pending.get(requestId);
+        if (!p) return;
+        pending.delete(requestId);
+        clearTimeout(p.timeoutId);
+        if (ok) p.resolve(payload);
+        else p.reject(new Error(error || 'Bridge request failed'));
+      } else {
+        // pass through event types to handlers
+        const listeners = eventHandlers.get(data.type);
+        if (listeners) for (const fn of listeners) fn(data.payload);
+      }
+    });
+
+    const eventHandlers = new Map();
+    function on(type, fn) {
+      if (!eventHandlers.has(type)) eventHandlers.set(type, new Set());
+      eventHandlers.get(type).add(fn);
+      return () => eventHandlers.get(type)?.delete(fn);
+    }
+
+    return { injectBridgeOnce, requestUsage, on };
+  }
+
+  /* ==================================================================
+   * Main init: inject bridge, set up usage + summary UI.
+   * ================================================================== */
+  function initAll() {
+    const bridge = makeBridgeClient();
+
+    // ---------- USAGE COUNTER STATE ----------
+    let usageState = null;
+    let usageResetMs = { five_hour: null, seven_day: null };
+    let usageFetchInFlight = false;
+    let lastUsageSseMs = 0;
+    let lastUsageUpdateMs = 0;
+    const rolloverHandledForResetMs = { five_hour: null, seven_day: null };
+    let currentOrgId = null;
+
+    function applyUsageUpdate(normalized, source) {
+      if (!normalized) return;
+      const now = Date.now();
+      usageState = normalized;
+      lastUsageUpdateMs = now;
+      if (source === 'sse') lastUsageSseMs = now;
+      usageResetMs.five_hour = normalized.five_hour?.resets_at
+        ? Date.parse(normalized.five_hour.resets_at)
+        : null;
+      usageResetMs.seven_day = normalized.seven_day?.resets_at
+        ? Date.parse(normalized.seven_day.resets_at)
+        : null;
+      usageUI.setUsage(normalized);
+    }
+
+    function updateOrgIdIfNeeded(newOrgId) {
+      if (newOrgId && typeof newOrgId === 'string' && newOrgId !== currentOrgId) {
+        currentOrgId = newOrgId;
+      }
+    }
+
+    async function refreshUsage() {
+      await bridge.injectBridgeOnce();
+      const orgId = currentOrgId || getOrgIdFromCookie();
+      if (!orgId) return;
+      updateOrgIdIfNeeded(orgId);
+      if (usageFetchInFlight) return;
+      usageFetchInFlight = true;
+      let raw;
+      try {
+        raw = await bridge.requestUsage(orgId);
+      } catch {
+        return;
+      } finally {
+        usageFetchInFlight = false;
+      }
+      const parsed = parseUsageFromEndpoint(raw);
+      applyUsageUpdate(parsed, 'usage');
+    }
+
+    // ---------- USAGE BAR UI ----------
+    const usageUI = createUsageUI({ onRefresh: refreshUsage });
+    usageUI.init();
+
+    bridge.on('cc:message_limit', (payload) => {
+      const parsed = parseUsageFromMessageLimit(payload);
+      applyUsageUpdate(parsed, 'sse');
+    });
+
+    // ---------- URL CHANGE ----------
+    function handleUrlChange() {
+      updateOrgIdIfNeeded(getOrgIdFromCookie());
+      waitForElement(MODEL_SELECTOR_DROPDOWN, 60000).then((el) => {
+        if (el) usageUI.attach();
+      });
+      if (!usageState) refreshUsage();
+    }
+
+    function observeUrlChanges(callback) {
+      let lastPath = location.pathname;
+      const fireIfChanged = () => {
+        const current = location.pathname;
+        if (current !== lastPath) {
+          lastPath = current;
+          callback();
+        }
+      };
+      window.addEventListener('cc:urlchange', fireIfChanged);
+      window.addEventListener('popstate', fireIfChanged);
+    }
+    observeUrlChanges(handleUrlChange);
+
+    // Tick countdowns + rollover refresh
+    function tick() {
+      usageUI.tick();
+      const now = Date.now();
+      if (usageResetMs.five_hour && now >= usageResetMs.five_hour && rolloverHandledForResetMs.five_hour !== usageResetMs.five_hour) {
+        rolloverHandledForResetMs.five_hour = usageResetMs.five_hour;
+        refreshUsage();
+      }
+      if (usageResetMs.seven_day && now >= usageResetMs.seven_day && rolloverHandledForResetMs.seven_day !== usageResetMs.seven_day) {
+        rolloverHandledForResetMs.seven_day = usageResetMs.seven_day;
+        refreshUsage();
+      }
+      const ONE_HOUR_MS = 60 * 60 * 1000;
+      const sseAge = now - lastUsageSseMs;
+      const anyAge = now - lastUsageUpdateMs;
+      if (!document.hidden && sseAge > ONE_HOUR_MS && anyAge > ONE_HOUR_MS) {
+        refreshUsage();
+      }
+    }
+    setInterval(tick, 1000);
+
+    // ---------- SUMMARY PANEL UI ----------
+    initSummaryPanel();
+
+    // Initial run
+    handleUrlChange();
+  }
+
+  /* ==================================================================
+   * Usage bar UI (claude-counter style, session/weekly only)
+   * ================================================================== */
+  const MODEL_SELECTOR_DROPDOWN = '[data-testid="model-selector-dropdown"]';
+  const CHAT_MENU_TRIGGER = '[data-testid="chat-menu-trigger"]';
+  const CHAT_PROJECT_WRAPPER = '.chat-project-wrapper';
+
+  function createUsageUI({ onRefresh }) {
+    const root = document.createElement('div');
+    root.className =
+      'cc-usageRow cc-hidden flex flex-row items-center gap-3 w-full';
+    root.style.cssText =
+      'display:none;position:relative;z-index:50;cursor:pointer;user-select:none;' +
+      'font-size:11px;color:#9aa0ab;';
+
+    function makeBar() {
+      const bar = document.createElement('div');
+      bar.className = 'cc-bar cc-bar--usage';
+      bar.style.cssText =
+        'position:relative;box-sizing:border-box;width:100%;height:10px;flex:1;' +
+        'border-radius:3px;border:1px solid #bfbfbf;background:transparent;';
+      const fill = document.createElement('div');
+      fill.className = 'cc-bar__fill';
+      fill.style.cssText =
+        'width:0%;height:100%;background:#5aa6ff;transition:width 300ms ease,background-color 300ms ease;' +
+        'border-top-left-radius:2px;border-bottom-left-radius:2px;';
+      bar.appendChild(fill);
+      return { bar, fill };
+    }
+
+    const sessionSpan = document.createElement('span');
+    sessionSpan.className = 'cc-usageText';
+    sessionSpan.style.cssText = 'white-space:nowrap;';
+    const session = makeBar();
+
+    const weeklySpan = document.createElement('span');
+    weeklySpan.className = 'cc-usageText';
+    weeklySpan.style.cssText = 'white-space:nowrap;';
+    const weekly = makeBar();
+
+    const sessionGroup = document.createElement('div');
+    sessionGroup.style.cssText =
+      'display:flex;align-items:center;gap:8px;flex:1;min-width:0;';
+    sessionGroup.appendChild(sessionSpan);
+    sessionGroup.appendChild(session.bar);
+
+    const weeklyGroup = document.createElement('div');
+    weeklyGroup.style.cssText =
+      'display:flex;align-items:center;gap:8px;flex:1;min-width:0;justify-content:flex-end;';
+    weeklyGroup.appendChild(weekly.bar);
+    weeklyGroup.appendChild(weeklySpan);
+
+    root.appendChild(sessionGroup);
+    root.appendChild(weeklyGroup);
+
+    let sessionResetMs = null;
+    let weeklyResetMs = null;
+
+    function setUsage(usage) {
+      const s = usage?.five_hour || null;
+      const w = usage?.seven_day || null;
+      const hasAny = !!(s && typeof s.utilization === 'number') || !!(w && typeof w.utilization === 'number');
+      root.style.display = hasAny ? 'flex' : 'none';
+
+      if (s && typeof s.utilization === 'number') {
+        const pct = Math.round(s.utilization * 10) / 10;
+        sessionResetMs = s.resets_at ? Date.parse(s.resets_at) : null;
+        const resetText = sessionResetMs ? ` · resets in ${formatResetCountdown(sessionResetMs)}` : '';
+        sessionSpan.textContent = `Session: ${pct}%${resetText}`;
+        const width = Math.max(0, Math.min(100, s.utilization));
+        session.fill.style.width = `${width}%`;
+        session.fill.style.background = width >= 90 ? '#ce2029' : '#5aa6ff';
+      } else {
+        sessionSpan.textContent = '';
+        session.fill.style.width = '0%';
+        sessionResetMs = null;
+      }
+
+      const hasWeekly = w && typeof w.utilization === 'number';
+      weeklyGroup.style.display = hasWeekly ? 'flex' : 'none';
+      if (hasWeekly) {
+        const pct = Math.round(w.utilization * 10) / 10;
+        weeklyResetMs = w.resets_at ? Date.parse(w.resets_at) : null;
+        const resetText = weeklyResetMs ? ` · resets in ${formatResetCountdown(weeklyResetMs)}` : '';
+        weeklySpan.textContent = `Weekly: ${pct}%${resetText}`;
+        const width = Math.max(0, Math.min(100, w.utilization));
+        weekly.fill.style.width = `${width}%`;
+        weekly.fill.style.background = width >= 90 ? '#ce2029' : '#5aa6ff';
+      } else {
+        weeklySpan.textContent = '';
+        weekly.fill.style.width = '0%';
+        weeklyResetMs = null;
+      }
+    }
+
+    function updateCountdowns() {
+      if (sessionResetMs && sessionSpan.textContent) {
+        const idx = sessionSpan.textContent.indexOf('· resets in');
+        if (idx !== -1) {
+          sessionSpan.textContent =
+            sessionSpan.textContent.slice(0, idx + '· resets in '.length) +
+            formatResetCountdown(sessionResetMs);
+        }
+      }
+      if (weeklyResetMs && weeklySpan.textContent) {
+        const idx = weeklySpan.textContent.indexOf('· resets in');
+        if (idx !== -1) {
+          weeklySpan.textContent =
+            weeklySpan.textContent.slice(0, idx + '· resets in '.length) +
+            formatResetCountdown(weeklyResetMs);
+        }
+      }
+    }
+
+    function attach() {
+      const modelSelector = document.querySelector(MODEL_SELECTOR_DROPDOWN);
+      if (!modelSelector) return;
+      const gridContainer = modelSelector.closest('[data-testid="chat-input-grid-container"]');
+      const gridArea = modelSelector.closest('[data-testid="chat-input-grid-area"]');
+      const findToolbarRow = (el, stopAt) => {
+        let cur = el;
+        while (cur && cur !== document.body) {
+          if (stopAt && cur === stopAt) break;
+          if (cur !== el && cur.nodeType === 1) {
+            const style = window.getComputedStyle(cur);
+            if (style.display === 'flex' && style.flexDirection === 'row') {
+              if (cur.querySelectorAll('button').length > 1) return cur;
+            }
+          }
+          cur = cur.parentElement;
+        }
+        return null;
+      };
+      const toolbarRow =
+        (gridContainer ? findToolbarRow(modelSelector, gridArea || gridContainer) : null) ||
+        findToolbarRow(modelSelector) ||
+        modelSelector.parentElement?.parentElement?.parentElement;
+      if (!toolbarRow) return;
+      if (toolbarRow.nextElementSibling !== root) toolbarRow.after(root);
+    }
+
+    root.addEventListener('click', () => {
+      if (onRefresh) onRefresh();
+    });
+
+    return {
+      init() {
+        // attach when the input area appears
+        waitForElement(MODEL_SELECTOR_DROPDOWN, 60000).then((el) => {
+          if (el) attach();
+        });
+      },
+      setUsage,
+      tick: updateCountdowns,
+      attach,
+    };
+  }
+
+  /* ==================================================================
+   * Summary panel (cloud button + Generate Summary)
+   * ================================================================== */
+  function initSummaryPanel() {
     const host = document.createElement('div');
     host.id = '__raincheck_summary_host__';
     const shadow = host.attachShadow({ mode: 'open' });
@@ -212,7 +609,7 @@
       <div class="rc-panel">
         <div class="rc-head">
           <img src="${chrome.runtime.getURL('src/assets/cloud.png')}" alt="" />
-          <div class="rc-title">RainCheck · Summary</div>
+          <div class="rc-title">RainCheck</div>
           <button class="rc-close" title="Close">✕</button>
         </div>
         <div class="rc-body">
@@ -224,7 +621,7 @@
           </div>
           <div class="rc-status"></div>
           <pre class="rc-out"></pre>
-          <div class="rc-muted">Everything stays on your device. This is a per-tab tool.</div>
+          <div class="rc-muted">Everything stays on your device. Per-tab tool.</div>
         </div>
       </div>
       <div class="rc-cloud" title="RainCheck">
@@ -233,25 +630,23 @@
     `;
     shadow.appendChild(wrap);
 
-    const rootEl = wrap;
-    const cloud = rootEl.querySelector('.rc-cloud');
-    const panel = rootEl.querySelector('.rc-panel');
-    const generateBtn = rootEl.querySelector('.rc-generate');
-    const statusEl = rootEl.querySelector('.rc-status');
-    const outEl = rootEl.querySelector('.rc-out');
-    const copyAll = rootEl.querySelector('.rc-copy-all');
-    const copyJson = rootEl.querySelector('.rc-copy-json');
-    const copySummary = rootEl.querySelector('.rc-copy-summary');
-    const closeBtn = rootEl.querySelector('.rc-close');
+    const cloud = wrap.querySelector('.rc-cloud');
+    const panel = wrap.querySelector('.rc-panel');
+    const generateBtn = wrap.querySelector('.rc-generate');
+    const statusEl = wrap.querySelector('.rc-status');
+    const outEl = wrap.querySelector('.rc-out');
+    const copyAll = wrap.querySelector('.rc-copy-all');
+    const copyJson = wrap.querySelector('.rc-copy-json');
+    const copySummary = wrap.querySelector('.rc-copy-summary');
+    const closeBtn = wrap.querySelector('.rc-close');
 
     let last = { output: '', json: '', summary: '' };
 
-    /* ----- draggable cloud ----- */
+    // Draggable cloud
     let dragging = false;
     let moved = false;
     let offsetX = 0;
     let offsetY = 0;
-
     cloud.addEventListener('mousedown', (e) => {
       dragging = true;
       moved = false;
@@ -285,7 +680,6 @@
       statusEl.textContent = text || '';
       statusEl.className = 'rc-status' + (kind ? ' ' + kind : '');
     }
-
     function resetPanel() {
       last = { output: '', json: '', summary: '' };
       outEl.classList.remove('visible');
@@ -296,25 +690,37 @@
       setStatus('');
     }
 
-    /* ----- generate ----- */
     generateBtn.addEventListener('click', () => {
       const convId = convIdFromUrl();
       if (!convId) {
         setStatus('Open a Claude conversation first (this page has no chat open).', 'error');
         return;
       }
+      const orgId = currentOrgId || getOrgIdFromCookie();
+      if (!orgId) {
+        setStatus('Could not find your Claude organization id.', 'error');
+        return;
+      }
       generateBtn.disabled = true;
       setStatus('Loading conversation from Claude…');
-      loadConversation(convId)
+      fetch(
+        API_ROOT +
+          '/organizations/' +
+          encodeURIComponent(orgId) +
+          '/chat_conversations/' +
+          encodeURIComponent(convId) +
+          '?tree=true&rendering_mode=messages&render_all_tools=true',
+        { credentials: 'include', headers: { 'content-type': 'application/json' } }
+      )
+        .then((res) => {
+          if (!res.ok) throw new Error('conversation API error ' + res.status);
+          return res.json();
+        })
         .then((data) => {
           const output = buildOutput(data);
           const chatMessages = (data && data.chat_messages) || [];
           const summary = (data && data.summary) || '';
-          last = {
-            output,
-            json: JSON.stringify(chatMessages, null, 2),
-            summary: summary,
-          };
+          last = { output, json: JSON.stringify(chatMessages, null, 2), summary };
           outEl.textContent = output;
           outEl.classList.add('visible');
           copyAll.disabled = false;
@@ -322,7 +728,7 @@
           copySummary.disabled = false;
           setStatus(
             '✓ Done. ' + chatMessages.length + ' message(s), ' +
-            (summary ? 'summary found' : 'no saved summary') + '.',
+              (summary ? 'summary found' : 'no saved summary') + '.',
             'ok'
           );
         })
@@ -345,7 +751,6 @@
       setTimeout(() => (btn.textContent = old), 1200);
     }
 
-    // Per-tab behavior: clear when navigating to another conversation / new page.
     function handleUrlChange() {
       resetPanel();
     }
@@ -367,16 +772,27 @@
     resetPanel();
   }
 
+  /* ==================================================================
+   * Bootstrap
+   * ================================================================== */
   if (typeof document !== 'undefined' && typeof window !== 'undefined') {
     if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', initUI);
+      document.addEventListener('DOMContentLoaded', initAll);
     } else {
-      initUI();
+      initAll();
     }
   }
 
   /* Node exports for testing the pure logic. */
   if (typeof module !== 'undefined' && module.exports) {
-    module.exports = { buildOutput, msgText, entireInteractionText, lastMessageText };
+    module.exports = {
+      buildOutput,
+      msgText,
+      entireInteractionText,
+      lastMessageText,
+      parseUsageFromEndpoint,
+      parseUsageFromMessageLimit,
+      formatResetCountdown,
+    };
   }
 })();

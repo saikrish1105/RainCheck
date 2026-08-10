@@ -1,7 +1,15 @@
 'use strict';
 const { test } = require('node:test');
 const assert = require('node:assert');
-const { buildOutput, msgText, entireInteractionText, lastMessageText } = require('../src/content/isolated.js');
+const {
+  buildOutput,
+  msgText,
+  entireInteractionText,
+  lastMessageText,
+  parseUsageFromEndpoint,
+  parseUsageFromMessageLimit,
+  formatResetCountdown,
+} = require('../src/content/isolated.js');
 
 const data = {
   name: 'Setup server',
@@ -50,4 +58,46 @@ test('empty conversation still produces a sensible output', () => {
   const out = buildOutput({ name: 'Empty', summary: '', chat_messages: [] });
   assert.ok(out.includes('(No saved summary available)'));
   assert.ok(out.includes('(No messages)'));
+});
+
+/* ---- Usage parsing (claude-counter) ---- */
+
+test('parseUsageFromEndpoint reads utilization % and resets_at', () => {
+  const u = parseUsageFromEndpoint({
+    five_hour: { utilization: 62.4, resets_at: '2026-01-01T00:00:00Z' },
+    seven_day: { utilization: 15, resets_at: '2026-01-05T00:00:00Z' },
+  });
+  assert.ok(u);
+  assert.equal(u.five_hour.utilization, 62.4);
+  assert.equal(u.five_hour.window_hours, 5);
+  assert.equal(u.seven_day.utilization, 15);
+  assert.equal(u.seven_day.window_hours, 168);
+});
+
+test('parseUsageFromEndpoint clamps and rejects invalid', () => {
+  const u = parseUsageFromEndpoint({ five_hour: { utilization: 150 }, seven_day: { utilization: -5 } });
+  assert.equal(u.five_hour.utilization, 100);
+  assert.equal(u.seven_day.utilization, 0);
+  assert.equal(parseUsageFromEndpoint({}), null);
+  assert.equal(parseUsageFromEndpoint(null), null);
+});
+
+test('parseUsageFromMessageLimit converts 0..1 utilization to % and epoch to ISO', () => {
+  const u = parseUsageFromMessageLimit({
+    windows: {
+      '5h': { utilization: 0.5, resets_at: 1700000000 },
+      '7d': { utilization: 0.2, resets_at: 1700000000 },
+    },
+  });
+  assert.ok(u);
+  assert.equal(u.five_hour.utilization, 50);
+  assert.equal(u.seven_day.utilization, 20);
+  assert.ok(u.five_hour.resets_at.includes('T'));
+});
+
+test('formatResetCountdown renders hours/days', () => {
+  const future = Date.now() + 3 * 60 * 60 * 1000;
+  assert.match(formatResetCountdown(future), /3h \d+m/);
+  const past = Date.now() - 1000;
+  assert.equal(formatResetCountdown(past), '0s');
 });

@@ -21,7 +21,10 @@ function load() {
   Object.defineProperty(window.document, 'readyState', { value: 'complete', configurable: true });
 
   window.chrome = {
-    runtime: { getURL: (p) => 'chrome-extension://mock/' + p },
+    runtime: {
+      // data: URI avoids jsdom trying to fetch a chrome:// script.
+      getURL: (p) => 'data:application/javascript,' + encodeURIComponent(''),
+    },
   };
   if (!window.navigator.clipboard) {
     Object.defineProperty(window.navigator, 'clipboard', {
@@ -31,11 +34,18 @@ function load() {
   }
 
   window.eval(src);
-  return window;
+  return { window, dom };
 }
 
-test('creates the cloud button and panel in a shadow root', () => {
-  const window = load();
+function closeDom(dom) {
+  try {
+    dom.window.close();
+  } catch (_) {}
+}
+
+test('creates the cloud button and panel in a shadow root', (t) => {
+  const { window, dom } = load();
+  t.after(() => closeDom(dom));
   const host = window.document.getElementById('__raincheck_summary_host__');
   assert.ok(host, 'host element should exist');
   const shadow = host.shadowRoot;
@@ -47,8 +57,9 @@ test('creates the cloud button and panel in a shadow root', () => {
   assert.ok(shadow.querySelector('.rc-copy-all'), 'Copy All button should exist');
 });
 
-test('clicking the cloud toggles the panel open', () => {
-  const window = load();
+test('clicking the cloud toggles the panel open', (t) => {
+  const { window, dom } = load();
+  t.after(() => closeDom(dom));
   const host = window.document.getElementById('__raincheck_summary_host__');
   const shadow = host.shadowRoot;
   const panel = shadow.querySelector('.rc-panel');
@@ -56,4 +67,29 @@ test('clicking the cloud toggles the panel open', () => {
   assert.equal(panel.classList.contains('open'), false, 'starts closed');
   cloud.dispatchEvent(new window.MouseEvent('click', { bubbles: true }));
   assert.equal(panel.classList.contains('open'), true, 'opens on click');
+});
+
+test('usage bar attaches after the model selector appears', (t) => {
+  const { window, dom } = load();
+  t.after(() => closeDom(dom));
+  // Build a realistic claude.ai-like flex toolbar row with a model selector + buttons.
+  const row = window.document.createElement('div');
+  row.style.display = 'flex';
+  row.style.flexDirection = 'row';
+  const sel = window.document.createElement('div');
+  sel.setAttribute('data-testid', 'model-selector-dropdown');
+  const b1 = window.document.createElement('button');
+  const b2 = window.document.createElement('button');
+  row.appendChild(sel);
+  row.appendChild(b1);
+  row.appendChild(b2);
+  window.document.body.appendChild(row);
+  window.dispatchEvent(new window.Event('popstate'));
+  // Let async waitForElement + attach settle.
+  return new Promise((resolve) => setTimeout(() => {
+    const usageRow = window.document.querySelector('.cc-usageRow');
+    assert.ok(usageRow, 'usage row should be created');
+    assert.ok(usageRow.querySelector('.cc-bar--usage'), 'usage bar should be created');
+    resolve();
+  }, 100));
 });
