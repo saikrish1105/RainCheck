@@ -941,9 +941,12 @@
  * Endpoints (documented by the community claude.ai exporters):
  *   GET /api/organizations                    -> [{ uuid, ... }]
  *   GET /api/organizations/{orgId}/chat_conversations/{conversationId}
+ *       ?tree=true&rendering_mode=messages&render_all_tools=true
  *                                          -> { name, chat_messages:[...] }
  *
- * The response shape is parsed defensively so small changes don't break it.
+ * The query params are REQUIRED: without them the endpoint returns only
+ * conversation metadata + a summary (no messages). The response shape is
+ * parsed defensively so small changes don't break it.
  */
 (function () {
   'use strict';
@@ -968,12 +971,17 @@
 
   function loadConversation(conversationId) {
     return getOrgId().then((orgId) => {
+      // Without these query params the endpoint returns only conversation
+      // metadata + a summary; with them it returns the full message tree.
+      const params =
+        '?tree=true&rendering_mode=messages&render_all_tools=true';
       const url =
         API_ROOT +
         '/organizations/' +
         encodeURIComponent(orgId) +
         '/chat_conversations/' +
-        encodeURIComponent(conversationId);
+        encodeURIComponent(conversationId) +
+        params;
       return fetch(url, {
         credentials: 'include',
         headers: { 'content-type': 'application/json' },
@@ -982,6 +990,19 @@
         return res.json();
       });
     });
+  }
+
+  /**
+   * Best-effort: if the conversation API returned no messages (older shape or
+   * a partial response), fall back to the conversation's own `summary` text so
+   * the user still gets a recoverable overview.
+   */
+  function summaryToContent(data) {
+    const s = data && data.summary;
+    if (s && typeof s === 'string' && s.trim()) {
+      return [{ type: 'text', text: s.trim() }];
+    }
+    return [];
   }
 
   function inferTypeFromInput(inp) {
@@ -1023,7 +1044,7 @@
     const title = data.name || data.title || '';
     // chat_messages is the shape used by the community exporters; also handle
     // messages / items / turns as common alternates.
-    const messages =
+    let messages =
       data.chat_messages ||
       data.messages ||
       data.items ||
@@ -1034,6 +1055,15 @@
     const userMessages = [];
     const assistantMessages = [];
     const artifacts = [];
+
+    // Fallback: if the API returned metadata + summary but no message array,
+    // surface the summary as an assistant-style overview.
+    if (!messages.length) {
+      const summaryBlocks = summaryToContent(data);
+      if (summaryBlocks.length) {
+        messages = [{ sender: 'assistant', content: summaryBlocks }];
+      }
+    }
 
     for (const m of messages) {
       if (!m || typeof m !== 'object') continue;

@@ -223,6 +223,9 @@ test('ApiLoader.loadConversation fetches org + conversation via session', async 
   const conv = await window.RC.ApiLoader.loadConversation('conv-abc');
   assert.ok(calls.length >= 2, 'should fetch organizations then conversation');
   assert.ok(calls[1].url.includes('/organizations/org-1/chat_conversations/conv-abc'));
+  assert.ok(calls[1].url.includes('tree=true'), 'should request the full message tree');
+  assert.ok(calls[1].url.includes('rendering_mode=messages'), 'should request messages rendering');
+  assert.ok(calls[1].url.includes('render_all_tools=true'), 'should render all tools');
   assert.ok(calls[0].opts.credentials === 'include', 'should send session credentials');
   const n = window.RC.ApiLoader.normalize(conv);
   assert.equal(n.userMessages.length, 1);
