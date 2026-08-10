@@ -74,35 +74,6 @@
     return parts.join('\n\n');
   }
 
-  // Readable text of a message (delegates to the robust msgText extractor).
-  function messageContentText(m) {
-    return msgText(m);
-  }
-
-  function roleLabel(m) {
-    const s = m.sender || m.role || '';
-    if (s === 'human' || s === 'user') return 'User';
-    if (s === 'assistant') return 'Assistant';
-    return 'Message';
-  }
-
-  // Convert the chat JSON into a clean, readable Markdown transcript.
-  function buildTranscriptMarkdown(chatMessages) {
-    const arr = Array.isArray(chatMessages) ? chatMessages : [];
-    const lines = [];
-    let i = 0;
-    for (const m of arr) {
-      const text = messageContentText(m).trim();
-      if (!text) continue;
-      i++;
-      lines.push(`### ${roleLabel(m)} ${i}`);
-      lines.push('');
-      lines.push(text);
-      lines.push('');
-    }
-    return lines.join('\n').trim();
-  }
-
   function buildOutput(data) {
     const chatMessages =
       (data && (Array.isArray(data.chat_messages) ? data.chat_messages : [])) || [];
@@ -125,8 +96,8 @@
     lines.push('The last text before rate limit was hit:');
     lines.push(lastMessageText(chatMessages) || '(No messages)');
     lines.push('');
-    lines.push('Full conversation transcript (markdown):');
-    lines.push(buildTranscriptMarkdown(chatMessages) || '(No messages)');
+    lines.push('Full chat JSON (all user + assistant messages):');
+    lines.push(JSON.stringify(chatMessages, null, 2));
     lines.push('');
     lines.push('Claude summary (pulled from API):');
     lines.push(summary || '(No saved summary available)');
@@ -664,7 +635,7 @@
           <button class="rc-generate">☁ Generate Summary</button>
           <div class="rc-actions">
             <button class="rc-btn primary rc-copy-all" disabled>Copy All</button>
-            <button class="rc-btn rc-copy-md" disabled>Copy Markdown</button>
+            <button class="rc-btn rc-copy-json" disabled>Copy JSON</button>
             <button class="rc-btn rc-copy-summary" disabled>Copy Summary</button>
           </div>
           <div class="rc-status"></div>
@@ -684,11 +655,11 @@
     const statusEl = wrap.querySelector('.rc-status');
     const outEl = wrap.querySelector('.rc-out');
     const copyAll = wrap.querySelector('.rc-copy-all');
-    const copyMd = wrap.querySelector('.rc-copy-md');
+    const copyJson = wrap.querySelector('.rc-copy-json');
     const copySummary = wrap.querySelector('.rc-copy-summary');
     const closeBtn = wrap.querySelector('.rc-close');
 
-    let last = { output: '', markdown: '', summary: '' };
+    let last = { output: '', json: '', summary: '' };
 
     // Position the panel anchored to the cloud's current location.
     function positionPanel() {
@@ -762,11 +733,11 @@
       statusEl.className = 'rc-status' + (kind ? ' ' + kind : '');
     }
     function resetPanel() {
-      last = { output: '', markdown: '', summary: '' };
+      last = { output: '', json: '', summary: '' };
       outEl.classList.remove('visible');
       outEl.textContent = '';
       copyAll.disabled = true;
-      copyMd.disabled = true;
+      copyJson.disabled = true;
       copySummary.disabled = true;
       setStatus('');
     }
@@ -801,16 +772,11 @@
           const output = buildOutput(data);
           const chatMessages = (data && data.chat_messages) || [];
           const summary = (data && data.summary) || '';
-          const markdown = buildTranscriptMarkdown(chatMessages);
-          if (chatMessages.length && !markdown) {
-            // Diagnostic: messages exist but no text was extracted — print the shape.
-            console.warn('[RainCheck] chat_messages present but text extraction empty. Sample:', JSON.stringify(chatMessages[0]).slice(0, 1000));
-          }
-          last = { output, markdown, summary };
+          last = { output, json: JSON.stringify(chatMessages, null, 2), summary };
           outEl.textContent = output;
           outEl.classList.add('visible');
           copyAll.disabled = false;
-          copyMd.disabled = false;
+          copyJson.disabled = false;
           copySummary.disabled = false;
           setStatus(
             '✓ Done. ' + chatMessages.length + ' message(s), ' +
@@ -828,7 +794,7 @@
     });
 
     copyAll.addEventListener('click', () => copyText(last.output, () => flash(copyAll)));
-    copyMd.addEventListener('click', () => copyText(last.markdown, () => flash(copyMd)));
+    copyJson.addEventListener('click', () => copyText(last.json, () => flash(copyJson)));
     copySummary.addEventListener('click', () => copyText(last.summary, () => flash(copySummary)));
 
     function flash(btn) {
@@ -873,8 +839,6 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       buildOutput,
-      buildTranscriptMarkdown,
-      messageContentText,
       msgText,
       entireInteractionText,
       lastMessageText,
