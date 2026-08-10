@@ -115,6 +115,22 @@
 
 		const { requestId, kind, payload } = data;
 		try {
+			// Resolve the active organization id. Prefer the caller-supplied id,
+			// otherwise fall back to the organizations endpoint (more reliable
+			// than the lastActiveOrg cookie, which may not be set on a fresh tab).
+			if (kind === 'organizations') {
+				const res = await originalFetch('https://claude.ai/api/organizations', {
+					method: 'GET',
+					credentials: 'include'
+				});
+				const json = await res.json();
+				let orgId = null;
+				if (Array.isArray(json) && json.length && json[0]?.uuid) orgId = json[0].uuid;
+				else if (json && json.uuid) orgId = json.uuid;
+				postResponse(requestId, true, { orgId }, null);
+				return;
+			}
+
 			if (kind === 'usage') {
 				const orgId = payload?.orgId;
 				if (!orgId) throw new Error('Missing orgId');

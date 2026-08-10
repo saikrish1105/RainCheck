@@ -358,6 +358,10 @@
       return request('usage', { orgId }, { timeoutMs: 15000 });
     }
 
+    function requestOrganizations() {
+      return request('organizations', {}, { timeoutMs: 15000 });
+    }
+
     window.addEventListener('message', (event) => {
       if (event.source !== window) return;
       const data = event.data;
@@ -384,7 +388,7 @@
       return () => eventHandlers.get(type)?.delete(fn);
     }
 
-    return { injectBridgeOnce, requestUsage, on };
+    return { injectBridgeOnce, requestUsage, requestOrganizations, on };
   }
 
   /* ==================================================================
@@ -400,6 +404,7 @@
     let lastUsageSseMs = 0;
     let lastUsageUpdateMs = 0;
     let lastUsageAttemptMs = 0;
+    let orgResolveAttempts = 0;
     const rolloverHandledForResetMs = { five_hour: null, seven_day: null };
 
     function applyUsageUpdate(normalized, source) {
@@ -423,17 +428,32 @@
       }
     }
 
+    // Resolve the active organization id reliably: try the cached value, then the
+    // lastActiveOrg cookie, then fall back to the /api/organizations endpoint via
+    // the bridge (works even when the cookie isn't set yet on a fresh tab).
+    async function resolveOrgId() {
+      if (currentOrgId) return currentOrgId;
+      const fromCookie = getOrgIdFromCookie();
+      if (fromCookie) return fromCookie;
+      try {
+        const res = await bridge.requestOrganizations();
+        if (res && res.orgId) return res.orgId;
+      } catch (_) {}
+      return null;
+    }
+
     async function refreshUsage() {
       const now = Date.now();
-      // Throttle repeated calls (used by the tick retry below).
-      if (now - lastUsageAttemptMs < 3000) return;
+      // Light throttle so the tick retry doesn't hammer the API.
+      if (now - lastUsageAttemptMs < 2500) return;
       lastUsageAttemptMs = now;
+      if (usageFetchInFlight) return;
 
       await bridge.injectBridgeOnce();
-      const orgId = currentOrgId || getOrgIdFromCookie();
+      const orgId = await resolveOrgId();
       if (!orgId) return;
       updateOrgIdIfNeeded(orgId);
-      if (usageFetchInFlight) return;
+
       usageFetchInFlight = true;
       let raw;
       try {
@@ -488,8 +508,10 @@
       usageUI.tick();
       const now = Date.now();
       // If usage hasn't loaded yet (e.g. the org cookie wasn't ready on a fresh
-      // tab), keep retrying every few seconds so the bar appears automatically.
-      if (!usageState && now - lastUsageAttemptMs > 4000) {
+      // tab), keep retrying periodically so the bar appears automatically. Cap
+      // the total retries so we don't loop forever if the user isn't logged in.
+      if (!usageState && now - lastUsageAttemptMs > 4000 && orgResolveAttempts < 60) {
+        orgResolveAttempts++;
         refreshUsage();
       }
       if (usageResetMs.five_hour && now >= usageResetMs.five_hour && rolloverHandledForResetMs.five_hour !== usageResetMs.five_hour) {
