@@ -462,20 +462,27 @@
    * Init: restore sessions, then create panel.
    * ---------------------------------------------------------- */
   function init() {
-    chrome.storage.local.get(null, (data) => {
-      data = data || {};
-      for (const k of Object.keys(data)) {
-        if (k.startsWith(STORE_PREFIX)) {
-          try {
-            const s = Session.fromPlain(data[k]);
-            sessions[s.convId] = s;
-          } catch (_) {}
+    // Always create the FAB/panel immediately, independent of storage.
+    ensurePanel();
+    console.log('[RainCheck] bridge loaded on', location.hostname);
+    try {
+      chrome.storage.local.get(null, (data) => {
+        data = data || {};
+        for (const k of Object.keys(data)) {
+          if (k.startsWith(STORE_PREFIX)) {
+            try {
+              const s = Session.fromPlain(data[k]);
+              sessions[s.convId] = s;
+            } catch (_) {}
+          }
         }
-      }
-      activeConvId = data['rc.active'] || convIdFromUrl() || mostRecentConvId();
-      if (!sessions[activeConvId]) activeConvId = mostRecentConvId();
-      ensurePanel();
-    });
+        activeConvId = data['rc.active'] || convIdFromUrl() || mostRecentConvId();
+        if (!sessions[activeConvId]) activeConvId = mostRecentConvId();
+        refreshUI();
+      });
+    } catch (e) {
+      console.warn('[RainCheck] storage unavailable:', e);
+    }
   }
 
   init();

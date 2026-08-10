@@ -63,6 +63,7 @@
       document.documentElement.appendChild(this.host);
       this.build(shadow);
       this.state = null;
+      try { console.log('[RainCheck] panel created'); } catch (_) {}
     }
 
     build(shadow) {

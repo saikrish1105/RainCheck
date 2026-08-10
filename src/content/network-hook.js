@@ -23,6 +23,7 @@
   }
 
   post({ type: 'hook-ready', ts: Date.now() });
+  try { console.log('[RainCheck] network hook injected in MAIN world'); } catch (_) {}
 
   /* ---------------------------------------------------------- *
    * URL / body helpers
