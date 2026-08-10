@@ -399,6 +399,7 @@
     let usageFetchInFlight = false;
     let lastUsageSseMs = 0;
     let lastUsageUpdateMs = 0;
+    let lastUsageAttemptMs = 0;
     const rolloverHandledForResetMs = { five_hour: null, seven_day: null };
 
     function applyUsageUpdate(normalized, source) {
@@ -423,6 +424,11 @@
     }
 
     async function refreshUsage() {
+      const now = Date.now();
+      // Throttle repeated calls (used by the tick retry below).
+      if (now - lastUsageAttemptMs < 3000) return;
+      lastUsageAttemptMs = now;
+
       await bridge.injectBridgeOnce();
       const orgId = currentOrgId || getOrgIdFromCookie();
       if (!orgId) return;
@@ -455,6 +461,10 @@
       updateOrgIdIfNeeded(getOrgIdFromCookie());
       waitForElement(MODEL_SELECTOR_DROPDOWN, 60000).then((el) => {
         if (el) usageUI.attach();
+        // The chat UI is now ready. On a fresh tab the org cookie / UI may not
+        // have been present at document_idle, so retry usage here so the bar
+        // appears automatically without a manual reload.
+        if (!usageState) refreshUsage();
       });
       if (!usageState) refreshUsage();
     }
@@ -477,6 +487,11 @@
     function tick() {
       usageUI.tick();
       const now = Date.now();
+      // If usage hasn't loaded yet (e.g. the org cookie wasn't ready on a fresh
+      // tab), keep retrying every few seconds so the bar appears automatically.
+      if (!usageState && now - lastUsageAttemptMs > 4000) {
+        refreshUsage();
+      }
       if (usageResetMs.five_hour && now >= usageResetMs.five_hour && rolloverHandledForResetMs.five_hour !== usageResetMs.five_hour) {
         rolloverHandledForResetMs.five_hour = usageResetMs.five_hour;
         refreshUsage();
@@ -844,14 +859,15 @@
         .then((data) => {
           const output = buildOutput(data);
           const chatMessages = (data && data.chat_messages) || [];
-          const summary = (data && data.summary) || '';
+          const summary = (data && typeof data.summary === 'string' ? data.summary : '').trim();
           const markdown = buildTranscriptMarkdown(data);
           last = { output, markdown, summary };
           outEl.textContent = output;
           outEl.classList.add('visible');
           copyAll.disabled = false;
           copyMd.disabled = false;
-          copySummary.disabled = false;
+          // Only enable Copy Summary if there is actually a summary to copy.
+          copySummary.disabled = !summary;
           setStatus(
             '✓ Done. ' + chatMessages.length + ' message(s), ' +
               (summary ? 'summary found' : 'no saved summary') + '.',
@@ -869,7 +885,13 @@
 
     copyAll.addEventListener('click', () => copyText(last.output, () => flash(copyAll)));
     copyMd.addEventListener('click', () => copyText(last.markdown, () => flash(copyMd)));
-    copySummary.addEventListener('click', () => copyText(last.summary, () => flash(copySummary)));
+    copySummary.addEventListener('click', () => {
+      if (!last.summary) {
+        setStatus('No summary available to copy.', 'error');
+        return;
+      }
+      copyText(last.summary, () => flash(copySummary));
+    });
 
     function flash(btn) {
       const old = btn.textContent;
