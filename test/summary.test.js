@@ -3,6 +3,8 @@ const { test } = require('node:test');
 const assert = require('node:assert');
 const {
   buildOutput,
+  buildTranscriptMarkdown,
+  messageContentText,
   msgText,
   entireInteractionText,
   lastMessageText,
@@ -26,7 +28,7 @@ test('buildOutput contains the continuation header', () => {
   assert.ok(out.includes('Do NOT restart from scratch'));
 });
 
-test('buildOutput contains Claude summary, entire interaction, last text, and JSON', () => {
+test('buildOutput contains Claude summary, entire interaction, last text, and transcript', () => {
   const out = buildOutput(data);
   assert.ok(out.includes('The summary of the text so far:'));
   assert.ok(out.includes('User set up Nextcloud with Docker.'));
@@ -34,8 +36,42 @@ test('buildOutput contains Claude summary, entire interaction, last text, and JS
   assert.ok(out.includes('Build a report'));
   assert.ok(out.includes('The last text before rate limit was hit:'));
   assert.ok(out.includes('Here is a partial document that got cut off'));
-  assert.ok(out.includes('Full chat JSON'));
-  assert.ok(out.includes('"uuid": "1"'));
+  assert.ok(out.includes('Full conversation transcript (markdown):'));
+  assert.ok(out.includes('### User 1'));
+  assert.ok(out.includes('### Assistant 2'));
+});
+
+test('buildTranscriptMarkdown renders a readable transcript', () => {
+  const md = buildTranscriptMarkdown(data.chat_messages);
+  assert.ok(md.includes('### User 1'));
+  assert.ok(md.includes('Build a report'));
+  assert.ok(md.includes('### Assistant 2'));
+  assert.ok(md.includes('Here is a partial document that got cut off'));
+});
+
+test('buildTranscriptMarkdown handles content arrays incl tool_use artifacts', () => {
+  const md = buildTranscriptMarkdown([
+    { sender: 'human', content: [{ type: 'text', text: 'make a script' }] },
+    {
+      sender: 'assistant',
+      content: [
+        { type: 'text', text: 'done' },
+        { type: 'tool_use', input: { content: 'print("hi")', title: 'run.py' } },
+      ],
+    },
+  ]);
+  assert.ok(md.includes('make a script'));
+  assert.ok(md.includes('done'));
+  assert.ok(md.includes('print("hi")'));
+});
+
+test('messageContentText handles text and tool_use', () => {
+  assert.equal(messageContentText({ text: 'hi' }), 'hi');
+  assert.equal(
+    messageContentText({ content: [{ type: 'text', text: 'a' }, { type: 'tool_use', input: { content: 'b' } }] }),
+    'a\nb'
+  );
+  assert.equal(messageContentText({}), '');
 });
 
 test('msgText handles direct text and content-array shapes', () => {

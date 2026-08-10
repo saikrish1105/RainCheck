@@ -33,10 +33,15 @@ handoff text with:
 - **the summary of the text so far** (Claude's saved summary)
 - **the entire text interaction** (all user + assistant messages)
 - **the last text before the rate limit was hit**
-- **the full chat JSON** (every user + assistant message) — view / copy
+- **a clean Markdown transcript** of the whole conversation (every user +
+  assistant message) — **Copy Markdown** or **Download .md**
 - Claude's saved summary again
 
 Per-tab: empty on a new page; navigating to another conversation resets it.
+
+The conversation is presented as a readable **Markdown transcript** (not raw
+JSON), so it's easy for you to read and for another AI to use as a continuation
+prompt. Buttons let you **Copy Markdown** or **Download .md**.
 
 ## Feature 2 — Usage bars (claude-counter)
 

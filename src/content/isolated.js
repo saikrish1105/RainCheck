@@ -55,6 +55,52 @@
     return parts.join('\n\n');
   }
 
+  // Readable text of a message, handling content arrays (text, tool_use, etc.).
+  function messageContentText(m) {
+    if (!m || typeof m !== 'object') return '';
+    if (typeof m.text === 'string') return m.text;
+    if (Array.isArray(m.content)) {
+      const parts = [];
+      for (const b of m.content) {
+        if (!b || typeof b !== 'object') continue;
+        if (b.type === 'text' && typeof b.text === 'string') parts.push(b.text);
+        else if (b.type === 'tool_use' && b.input && typeof b.input.content === 'string') {
+          parts.push(b.input.content); // include generated artifact content
+        } else if (b.type === 'tool_result' && typeof b.content === 'string') {
+          parts.push(b.content);
+        } else if (typeof b.text === 'string') {
+          parts.push(b.text);
+        }
+      }
+      return parts.join('\n');
+    }
+    return '';
+  }
+
+  function roleLabel(m) {
+    const s = m.sender || m.role || '';
+    if (s === 'human' || s === 'user') return 'User';
+    if (s === 'assistant') return 'Assistant';
+    return 'Message';
+  }
+
+  // Convert the chat JSON into a clean, readable Markdown transcript.
+  function buildTranscriptMarkdown(chatMessages) {
+    const arr = Array.isArray(chatMessages) ? chatMessages : [];
+    const lines = [];
+    let i = 0;
+    for (const m of arr) {
+      const text = messageContentText(m).trim();
+      if (!text) continue;
+      i++;
+      lines.push(`### ${roleLabel(m)} ${i}`);
+      lines.push('');
+      lines.push(text);
+      lines.push('');
+    }
+    return lines.join('\n').trim();
+  }
+
   function buildOutput(data) {
     const chatMessages =
       (data && (Array.isArray(data.chat_messages) ? data.chat_messages : [])) || [];
@@ -77,8 +123,8 @@
     lines.push('The last text before rate limit was hit:');
     lines.push(lastMessageText(chatMessages) || '(No messages)');
     lines.push('');
-    lines.push('Full chat JSON (all user + assistant messages):');
-    lines.push(JSON.stringify(chatMessages, null, 2));
+    lines.push('Full conversation transcript (markdown):');
+    lines.push(buildTranscriptMarkdown(chatMessages) || '(No messages)');
     lines.push('');
     lines.push('Claude summary (pulled from API):');
     lines.push(summary || '(No saved summary available)');
@@ -616,7 +662,8 @@
           <button class="rc-generate">☁ Generate Summary</button>
           <div class="rc-actions">
             <button class="rc-btn primary rc-copy-all" disabled>Copy All</button>
-            <button class="rc-btn rc-copy-json" disabled>Copy JSON</button>
+            <button class="rc-btn rc-copy-md" disabled>Copy Markdown</button>
+            <button class="rc-btn rc-dl-md" disabled>Download .md</button>
             <button class="rc-btn rc-copy-summary" disabled>Copy Summary</button>
           </div>
           <div class="rc-status"></div>
@@ -636,11 +683,12 @@
     const statusEl = wrap.querySelector('.rc-status');
     const outEl = wrap.querySelector('.rc-out');
     const copyAll = wrap.querySelector('.rc-copy-all');
-    const copyJson = wrap.querySelector('.rc-copy-json');
+    const copyMd = wrap.querySelector('.rc-copy-md');
+    const dlMd = wrap.querySelector('.rc-dl-md');
     const copySummary = wrap.querySelector('.rc-copy-summary');
     const closeBtn = wrap.querySelector('.rc-close');
 
-    let last = { output: '', json: '', summary: '' };
+    let last = { output: '', markdown: '', summary: '' };
 
     // Position the panel anchored to the cloud's current location.
     function positionPanel() {
@@ -714,11 +762,12 @@
       statusEl.className = 'rc-status' + (kind ? ' ' + kind : '');
     }
     function resetPanel() {
-      last = { output: '', json: '', summary: '' };
+      last = { output: '', markdown: '', summary: '' };
       outEl.classList.remove('visible');
       outEl.textContent = '';
       copyAll.disabled = true;
-      copyJson.disabled = true;
+      copyMd.disabled = true;
+      dlMd.disabled = true;
       copySummary.disabled = true;
       setStatus('');
     }
@@ -753,11 +802,13 @@
           const output = buildOutput(data);
           const chatMessages = (data && data.chat_messages) || [];
           const summary = (data && data.summary) || '';
-          last = { output, json: JSON.stringify(chatMessages, null, 2), summary };
+          const markdown = buildTranscriptMarkdown(chatMessages);
+          last = { output, markdown, summary };
           outEl.textContent = output;
           outEl.classList.add('visible');
           copyAll.disabled = false;
-          copyJson.disabled = false;
+          copyMd.disabled = false;
+          dlMd.disabled = false;
           copySummary.disabled = false;
           setStatus(
             '✓ Done. ' + chatMessages.length + ' message(s), ' +
@@ -775,13 +826,36 @@
     });
 
     copyAll.addEventListener('click', () => copyText(last.output, () => flash(copyAll)));
-    copyJson.addEventListener('click', () => copyText(last.json, () => flash(copyJson)));
+    copyMd.addEventListener('click', () => copyText(last.markdown, () => flash(copyMd)));
     copySummary.addEventListener('click', () => copyText(last.summary, () => flash(copySummary)));
+    dlMd.addEventListener('click', () => downloadMd(last.markdown, mdFilename()));
 
     function flash(btn) {
       const old = btn.textContent;
       btn.textContent = 'Copied!';
       setTimeout(() => (btn.textContent = old), 1200);
+    }
+
+    function mdFilename() {
+      const slug = (document.title || 'conversation')
+        .replace(/[\\/:*?"<>|]/g, '_')
+        .trim()
+        .slice(0, 60) || 'conversation';
+      const stamp = new Date().toISOString().slice(0, 10);
+      return `RainCheck-${slug}-${stamp}.md`;
+    }
+
+    function downloadMd(text, filename) {
+      if (!text) return;
+      const blob = new Blob([text], { type: 'text/markdown;charset=utf-8' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
     function handleUrlChange() {
@@ -820,6 +894,8 @@
   if (typeof module !== 'undefined' && module.exports) {
     module.exports = {
       buildOutput,
+      buildTranscriptMarkdown,
+      messageContentText,
       msgText,
       entireInteractionText,
       lastMessageText,
