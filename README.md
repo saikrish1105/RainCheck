@@ -5,9 +5,13 @@ A Chrome extension for claude.ai with two features:
 1. **Usage bars** (claude-counter style) — live session (5h) and weekly (7d)
    utilization percentages with progress bars and reset countdowns, injected
    into the chat input area.
-2. **Generate Summary** — a one-button handoff: turns your conversation into a
+   <img width="930" height="140" alt="Screenshot 2026-08-10 152805" src="https://github.com/user-attachments/assets/0063fa01-1767-4338-907a-5798c3410e1d" />
+
+3. **Generate Summary** — a one-button handoff: turns your conversation into a
    clean, LLM-ready markdown transcript you can paste into another AI or session
    to continue where you left off.
+   <img width="1895" height="760" alt="Screenshot 2026-08-10 155203" src="https://github.com/user-attachments/assets/4f67d1cc-53fd-4574-8264-659e3479b09e" />
+
 
 Nothing runs automatically except the usage bars. The summary is generated only
 when you press **Generate Summary**.
@@ -55,11 +59,9 @@ Data comes from the same two sources claude-counter uses:
 ---
 
 ## Install (load unpacked)
-1. Open `chrome://extensions`, toggle **Developer mode** ON.
-2. Click **Load unpacked** and select the **`RainCheck`** folder (the one that
-   directly contains `manifest.json`).
-3. Open **claude.ai** — the cloud button appears bottom-right; the usage bars
-   appear in the chat input area.
+1. Go to the link : [Extension](https://chromewebstore.google.com/detail/raincheck/epbnfdblpahffkbbfcmfaaflpibcinnk)
+2. Press add to chrome
+3. And you can use it on any chat in claude!!
 
 ## Layout
 ```
@@ -79,24 +81,7 @@ RainCheck/
 
 ## Website
 
-A dark, orange-themed static site lives in `website/` (no build step — plain
-HTML/CSS). Pages:
-- `index.html` — landing page (hero, features, how-it-works)
-- `faq.html` — FAQ (accordion)
-- `terms.html` — Terms of Service
-- `privacy.html` — Privacy Policy
-
-The "Install extension" buttons are placeholders — fill them in once the
-extension is published to the Chrome Web Store. Preview locally with:
-
-```bash
-python3 -m http.server 8080 --directory website
-```
-
-## Test
-```bash
-npm install   # dev dependency: jsdom (tests only)
-npm test
+Check out the landing page for the extension at [Homepage](https://raincheck.krish.systems/)
 ```
 
 ## Privacy
