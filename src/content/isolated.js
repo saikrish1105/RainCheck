@@ -358,10 +358,6 @@
       return request('usage', { orgId }, { timeoutMs: 15000 });
     }
 
-    function requestOrganizations() {
-      return request('organizations', {}, { timeoutMs: 15000 });
-    }
-
     window.addEventListener('message', (event) => {
       if (event.source !== window) return;
       const data = event.data;
@@ -388,7 +384,7 @@
       return () => eventHandlers.get(type)?.delete(fn);
     }
 
-    return { injectBridgeOnce, requestUsage, requestOrganizations, on };
+    return { injectBridgeOnce, requestUsage, on };
   }
 
   /* ==================================================================
@@ -403,8 +399,6 @@
     let usageFetchInFlight = false;
     let lastUsageSseMs = 0;
     let lastUsageUpdateMs = 0;
-    let lastUsageAttemptMs = 0;
-    let orgResolveAttempts = 0;
     const rolloverHandledForResetMs = { five_hour: null, seven_day: null };
 
     function applyUsageUpdate(normalized, source) {
@@ -428,32 +422,12 @@
       }
     }
 
-    // Resolve the active organization id reliably: try the cached value, then the
-    // lastActiveOrg cookie, then fall back to the /api/organizations endpoint via
-    // the bridge (works even when the cookie isn't set yet on a fresh tab).
-    async function resolveOrgId() {
-      if (currentOrgId) return currentOrgId;
-      const fromCookie = getOrgIdFromCookie();
-      if (fromCookie) return fromCookie;
-      try {
-        const res = await bridge.requestOrganizations();
-        if (res && res.orgId) return res.orgId;
-      } catch (_) {}
-      return null;
-    }
-
     async function refreshUsage() {
-      const now = Date.now();
-      // Light throttle so the tick retry doesn't hammer the API.
-      if (now - lastUsageAttemptMs < 2500) return;
-      lastUsageAttemptMs = now;
-      if (usageFetchInFlight) return;
-
       await bridge.injectBridgeOnce();
-      const orgId = await resolveOrgId();
+      const orgId = currentOrgId || getOrgIdFromCookie();
       if (!orgId) return;
       updateOrgIdIfNeeded(orgId);
-
+      if (usageFetchInFlight) return;
       usageFetchInFlight = true;
       let raw;
       try {
@@ -481,39 +455,37 @@
       updateOrgIdIfNeeded(getOrgIdFromCookie());
       waitForElement(MODEL_SELECTOR_DROPDOWN, 60000).then((el) => {
         if (el) usageUI.attach();
-        // The chat UI is now ready. On a fresh tab the org cookie / UI may not
-        // have been present at document_idle, so retry usage here so the bar
-        // appears automatically without a manual reload.
-        if (!usageState) refreshUsage();
       });
       if (!usageState) refreshUsage();
     }
 
-    function observeUrlChanges(callback) {
+    // Shared nav-change pub/sub. `cc:urlchange` (from the MAIN-world bridge)
+    // and native `popstate` are the only signals that actually fire on real
+    // navigation — anything needing to react to a chat switch should
+    // subscribe here rather than re-implementing its own detection.
+    const urlChangeListeners = new Set();
+    function onUrlChange(fn) {
+      urlChangeListeners.add(fn);
+    }
+    function observeUrlChanges() {
       let lastPath = location.pathname;
       const fireIfChanged = () => {
         const current = location.pathname;
         if (current !== lastPath) {
           lastPath = current;
-          callback();
+          for (const fn of urlChangeListeners) fn();
         }
       };
       window.addEventListener('cc:urlchange', fireIfChanged);
       window.addEventListener('popstate', fireIfChanged);
     }
-    observeUrlChanges(handleUrlChange);
+    onUrlChange(handleUrlChange);
+    observeUrlChanges();
 
     // Tick countdowns + rollover refresh
     function tick() {
       usageUI.tick();
       const now = Date.now();
-      // If usage hasn't loaded yet (e.g. the org cookie wasn't ready on a fresh
-      // tab), keep retrying periodically so the bar appears automatically. Cap
-      // the total retries so we don't loop forever if the user isn't logged in.
-      if (!usageState && now - lastUsageAttemptMs > 4000 && orgResolveAttempts < 60) {
-        orgResolveAttempts++;
-        refreshUsage();
-      }
       if (usageResetMs.five_hour && now >= usageResetMs.five_hour && rolloverHandledForResetMs.five_hour !== usageResetMs.five_hour) {
         rolloverHandledForResetMs.five_hour = usageResetMs.five_hour;
         refreshUsage();
@@ -532,7 +504,7 @@
     setInterval(tick, 1000);
 
     // ---------- SUMMARY PANEL UI ----------
-    initSummaryPanel();
+    initSummaryPanel({ onUrlChange });
 
     // Initial run
     handleUrlChange();
@@ -689,6 +661,23 @@
         waitForElement(MODEL_SELECTOR_DROPDOWN, 60000).then((el) => {
           if (el) attach();
         });
+        // Fallback re-attach: SPA chat switches can unmount/rebuild the
+        // toolbar row without ever firing a pushState/popstate event we
+        // can catch (in-app link clicks in particular often slip past
+        // that detection). Rather than depend on URL-change signals,
+        // watch the bar itself — if it ever falls out of the DOM,
+        // put it back. Throttled to once per animation frame so it
+        // stays cheap even during heavy React re-renders.
+        let reattachScheduled = false;
+        const reattachObserver = new MutationObserver(() => {
+          if (reattachScheduled) return;
+          reattachScheduled = true;
+          requestAnimationFrame(() => {
+            reattachScheduled = false;
+            if (!root.isConnected) attach();
+          });
+        });
+        reattachObserver.observe(document.body, { childList: true, subtree: true });
       },
       setUsage,
       tick: updateCountdowns,
@@ -699,7 +688,7 @@
   /* ==================================================================
    * Summary panel (cloud button + Generate Summary)
    * ================================================================== */
-  function initSummaryPanel() {
+  function initSummaryPanel({ onUrlChange } = {}) {
     const host = document.createElement('div');
     host.id = '__raincheck_summary_host__';
     const shadow = host.attachShadow({ mode: 'open' });
@@ -881,15 +870,14 @@
         .then((data) => {
           const output = buildOutput(data);
           const chatMessages = (data && data.chat_messages) || [];
-          const summary = (data && typeof data.summary === 'string' ? data.summary : '').trim();
+          const summary = (data && data.summary) || '';
           const markdown = buildTranscriptMarkdown(data);
           last = { output, markdown, summary };
           outEl.textContent = output;
           outEl.classList.add('visible');
           copyAll.disabled = false;
           copyMd.disabled = false;
-          // Only enable Copy Summary if there is actually a summary to copy.
-          copySummary.disabled = !summary;
+          copySummary.disabled = false;
           setStatus(
             '✓ Done. ' + chatMessages.length + ' message(s), ' +
               (summary ? 'summary found' : 'no saved summary') + '.',
@@ -907,13 +895,7 @@
 
     copyAll.addEventListener('click', () => copyText(last.output, () => flash(copyAll)));
     copyMd.addEventListener('click', () => copyText(last.markdown, () => flash(copyMd)));
-    copySummary.addEventListener('click', () => {
-      if (!last.summary) {
-        setStatus('No summary available to copy.', 'error');
-        return;
-      }
-      copyText(last.summary, () => flash(copySummary));
-    });
+    copySummary.addEventListener('click', () => copyText(last.summary, () => flash(copySummary)));
 
     function flash(btn) {
       const old = btn.textContent;
@@ -921,22 +903,14 @@
       setTimeout(() => (btn.textContent = old), 1200);
     }
 
-    function handleUrlChange() {
-      resetPanel();
-    }
-    const pushState = history.pushState;
-    const replaceState = history.replaceState;
-    history.pushState = function () {
-      const r = pushState.apply(this, arguments);
-      handleUrlChange();
-      return r;
-    };
-    history.replaceState = function () {
-      const r = replaceState.apply(this, arguments);
-      handleUrlChange();
-      return r;
-    };
-    window.addEventListener('popstate', handleUrlChange);
+    // Clear the panel's stale output when the user switches chats.
+    // (Previously this tried to patch history.pushState/replaceState
+    // itself, but a content script runs in an isolated JS world — that
+    // patch only shadowed the property for this script and never saw
+    // Claude's own navigation calls, so it silently never fired. The
+    // usage counter's nav detection above is the one that actually
+    // works; we just subscribe to it instead of duplicating it.)
+    if (onUrlChange) onUrlChange(resetPanel);
 
     document.documentElement.appendChild(host);
     resetPanel();
